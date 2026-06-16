@@ -96,7 +96,6 @@ Driver={Trino ODBC};Server=localhost;Port=8080;User=admin;Catalog=memory;Schema=
 
 ## Known Limitations
 
-- Trino is read-only: INSERT, UPDATE, DELETE operations return SQL_ERROR
 - Native server-side cursors are not supported; scrollable cursors use client-side caching
 - Transaction control is limited (Trino does not support multi-statement transactions)
 - Complex types (array, map, row) are returned as JSON strings
