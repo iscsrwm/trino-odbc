@@ -14,7 +14,6 @@ typedef struct {
     SQLULEN                row_count;
     bool                   at_end;
     bool                   needs_fetch;
-    SQLUINTEGER            cursor_type;   /* SQL_CURSOR_FORWARD_ONLY, etc. */
 } trino_resultset_t;
 
 /* Create/destroy result set */

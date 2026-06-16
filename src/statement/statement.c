@@ -174,6 +174,23 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
         stmt->resultset = NULL;
     }
 
+    /* Detect write operations (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, TRUNCATE) */
+    bool is_write_op = false;
+    const char *sql_upper = (const char *)sql;
+    /* Skip leading whitespace */
+    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
+    if (strncmp(sql_upper, "INSERT", 6) == 0 ||
+        strncmp(sql_upper, "UPDATE", 6) == 0 ||
+        strncmp(sql_upper, "DELETE", 6) == 0 ||
+        strncmp(sql_upper, "CREATE", 6) == 0 ||
+        strncmp(sql_upper, "DROP", 4) == 0 ||
+        strncmp(sql_upper, "ALTER", 5) == 0 ||
+        strncmp(sql_upper, "TRUNCATE", 8) == 0 ||
+        strncmp(sql_upper, "GRANT", 5) == 0 ||
+        strncmp(sql_upper, "REVOKE", 6) == 0) {
+        is_write_op = true;
+    }
+
     /* Get HTTP client */
     trino_http_client_t *client = trino_conn_get_http_client(stmt->conn);
     if (!client) {
@@ -214,26 +231,44 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
     free(stmt->query_id);
     stmt->query_id = strdup((char *)results->query_id);
 
-    /* Set up result set */
-    stmt->resultset = trino_resultset_create(results);
-    stmt->executed = true;
-    stmt->at_end = false;
-    stmt->current_row = 0;
-    stmt->column_count = results->column_count;
+    /* Store query statistics */
+    stmt->rows_processed = results->rows_processed;
+    stmt->bytes_processed = results->bytes_processed;
+    stmt->elapsed_time_ms = (SQLULEN)(results->elapsed_time * 1000.0);
 
-    /* Update IRD with column metadata */
-    if (results->columns && results->column_count > 0) {
-        for (SQLULEN i = 0; i < results->column_count; i++) {
-            trino_column_meta_t *col = &results->columns[i];
-            trino_desc_record_t *rec = &stmt->ird->records[i];
-            rec->sql_type = col->odbc_type;
-            rec->nullable = col->nullable;
-            strncpy((char *)rec->column_name, (char *)col->name,
-                    SQL_MAX_IDENTIFIER_LEN);
-            strncpy((char *)rec->type_name, (char *)col->type,
-                    SQL_MAX_IDENTIFIER_LEN);
+    /* For write operations, set row_count from stats and don't create resultset */
+    if (is_write_op) {
+        stmt->row_count = (SQLLEN)results->rows_processed;
+        stmt->column_count = 0;
+        stmt->executed = true;
+        stmt->at_end = true;
+        /* Write operations don't return result sets */
+        stmt->resultset = NULL;
+    } else {
+        /* Read operation - set up result set */
+        stmt->resultset = trino_resultset_create(results);
+        if (stmt->resultset) {
+            ((trino_resultset_t *)stmt->resultset)->cursor_type = stmt->cursor_type;
         }
-        stmt->ird->record_count = results->column_count;
+        stmt->executed = true;
+        stmt->at_end = false;
+        stmt->current_row = 0;
+        stmt->column_count = results->column_count;
+
+        /* Update IRD with column metadata */
+        if (results->columns && results->column_count > 0) {
+            for (SQLULEN i = 0; i < results->column_count; i++) {
+                trino_column_meta_t *col = &results->columns[i];
+                trino_desc_record_t *rec = &stmt->ird->records[i];
+                rec->sql_type = col->odbc_type;
+                rec->nullable = col->nullable;
+                strncpy((char *)rec->column_name, (char *)col->name,
+                        SQL_MAX_IDENTIFIER_LEN);
+                strncpy((char *)rec->type_name, (char *)col->type,
+                        SQL_MAX_IDENTIFIER_LEN);
+            }
+            stmt->ird->record_count = results->column_count;
+        }
     }
 
     trino_http_client_destroy(client);
@@ -431,6 +466,10 @@ SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr,
             stmt->max_rows = *(SQLULEN *)value;
             break;
 
+        case SQL_ATTR_ROW_ARRAY_SIZE:
+            stmt->row_array_size = *(SQLULEN *)value;
+            break;
+
         default:
             break;
     }
@@ -478,6 +517,11 @@ SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr,
 
         case SQL_ATTR_MAX_ROWS:
             *(SQLULEN *)value = stmt->max_rows;
+            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLULEN);
+            break;
+
+        case SQL_ATTR_ROW_ARRAY_SIZE:
+            *(SQLULEN *)value = stmt->row_array_size;
             if (str_len) *str_len = (SQLINTEGER)sizeof(SQLULEN);
             break;
 

@@ -109,6 +109,11 @@ trino_conn_t *trino_conn_create(trino_env_t *env)
     conn->max_rows = 0; /* unlimited */
     conn->connected = false;
 
+    /* Transaction defaults */
+    conn->in_transaction = false;
+    conn->txn_isolation = SQL_TXN_READ_COMMITTED;
+    conn->txn_savepoint = NULL;
+
     trino_diag_init(&conn->diagnostics);
     pthread_mutex_init(&conn->mutex, NULL);
 
@@ -141,6 +146,7 @@ void trino_conn_destroy(trino_conn_t *conn)
     free(conn->ssl_truststore);
     free(conn->client_tags_json);
     free(conn->session_properties_json);
+    free(conn->txn_savepoint);
 
     /* Free statement list */
     if (conn->statements) {

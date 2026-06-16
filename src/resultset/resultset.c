@@ -18,6 +18,7 @@ trino_resultset_t *trino_resultset_create(trino_query_results_t *qr)
     rs->row_count = qr ? qr->row_count : 0;
     rs->at_end = (rs->row_count == 0 && !qr);
     rs->needs_fetch = false;
+    rs->cursor_type = SQL_CURSOR_FORWARD_ONLY;   /* Default to forward-only */
 
     return rs;
 }
@@ -135,13 +136,21 @@ SQLRETURN trino_resultset_fetch_scroll(trino_resultset_t *rs, SQLINTEGER orienta
             return SQL_SUCCESS;
 
         case SQL_FETCH_RELATIVE:
-            if (offset > 0) {
+            if (offset >= 0) {
                 rs->current_row += (SQLULEN)offset;
-            } else if (offset < 0) {
-                /* Backward not supported for forward-only */
-                return SQL_ERROR;
+            } else {
+                /* Backward fetch - only for scrollable cursors */
+                if (rs->cursor_type == SQL_CURSOR_FORWARD_ONLY) {
+                    return SQL_ERROR;
+                }
+                SQLLEN new_pos = (SQLLEN)rs->current_row + offset;
+                if (new_pos >= 0) {
+                    rs->current_row = (SQLULEN)new_pos;
+                } else {
+                    rs->current_row = 0;
+                }
             }
-            return SQL_SUCCESS;
+            return trino_resultset_fetch(rs, NULL);
 
         default:
             return SQL_ERROR;

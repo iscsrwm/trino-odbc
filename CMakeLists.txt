@@ -19,6 +19,12 @@ option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer
 find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
 
+# cJSON for JSON parsing
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(JSON_C REQUIRED json-c)
+include_directories(${JSON_C_INCLUDE_DIRS})
+link_libraries(${JSON_C_LIBRARIES})
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/src)

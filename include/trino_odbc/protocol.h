@@ -3,6 +3,7 @@
 
 #include "trino_odbc.h"
 #include <curl/curl.h>
+#include <json-c/json.h>
 
 /* ========================================================================
  * Trino Query States
@@ -136,7 +137,15 @@ SQLSMALLINT trino_type_to_odbc_type(const char *trino_type);
 /* Get human-readable name for Trino type */
 const char *trino_type_name(SQLSMALLINT odbc_type);
 
-/* Parse column metadata from JSON columns array string */
+/* Parse column metadata from QueryResults JSON using json-c */
 trino_column_meta_t *trino_parse_columns(const char *json, SQLULEN *column_count);
 
+/* Parse column metadata from JSON columns array using json-c */
+trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLULEN *column_count);
+
 #endif /* TRINO_ODBC_PROTOCOL_H */
+
+/* Wide character string helpers (from wchar.c) */
+char *trino_wchars_to_utf8(const SQLWCHAR *wstr, size_t wlen);
+SQLWCHAR *trino_utf8_to_wchars(const char *str, size_t *out_wlen);
+size_t trino_wstrlen(const SQLWCHAR *wstr);

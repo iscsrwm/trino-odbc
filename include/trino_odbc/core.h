@@ -105,6 +105,11 @@ typedef struct {
     bool                  ssl_enabled;
     SQLCHAR              *ssl_truststore;
 
+    /* Transaction state */
+    bool                  in_transaction;
+    SQLUINTEGER           txn_isolation;   /* SQL_TXN_READ_COMMITTED etc. */
+    SQLCHAR              *txn_savepoint;   /* current savepoint name */
+
     /* Cursor type */
     SQLUINTEGER           cursor_type;
     SQLUINTEGER           concurrency;

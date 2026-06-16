@@ -35,6 +35,10 @@ typedef uint32_t SQLULONG;
 typedef int32_t  SQLLONG;
 typedef int16_t  SQLSMALLINT;
 typedef int16_t SQLSWORD;
+typedef uint8_t SQLBOOLEAN;
+
+#define SQL_TRUE    1
+#define SQL_FALSE   0
 
 /* Opaque handle */
 typedef void *SQLHANDLE;
@@ -52,12 +56,35 @@ typedef void *SQLHDBC;
 typedef void *SQLHSTMT;
 typedef void *SQLHDESC;
 
+/* Row identifier type for SQLSetPos */
+typedef SQLULEN SQLSETPOSIROW;
+
 /* ========================================================================
  * Character Types
  * ======================================================================== */
 
-typedef char SQLCHAR;
-typedef void *SQLPOINTER;
+typedef char    SQLCHAR;
+typedef void   *SQLPOINTER;
+
+/* Wide character type (SQLWCHAR) */
+#ifdef _WIN32
+typedef wchar_t SQLWCHAR;
+#else
+typedef uint16_t SQLWCHAR;  /* UTF-16 on non-Windows */
+#endif
+
+/* ========================================================================
+ * Character Conversion Helpers
+ * ======================================================================== */
+
+/* Convert SQLWCHAR (UTF-16) to UTF-8 string. Caller must free result. */
+char *trino_wchars_to_utf8(const SQLWCHAR *wstr, size_t wlen);
+
+/* Convert UTF-8 to SQLWCHAR (UTF-16). Caller must free result. */
+SQLWCHAR *trino_utf8_to_wchars(const char *str, size_t *out_wlen);
+
+/* Get length of UTF-16 string (in wide chars) */
+size_t trino_wstrlen(const SQLWCHAR *wstr);
 
 /* ========================================================================
  * Numeric Types
@@ -98,8 +125,10 @@ typedef double   SQLDOUBLE;
 #define SQL_C_STINYINT      (-55)
 #define SQL_C_UTINYINT      (-56)
 #define SQL_C_SHORT         (-2)
+#define SQL_C_SSHORTINT     (-50)  /* Signed short */
 #define SQL_C_USHORT        (-14)
 #define SQL_C_LONG          (-3)
+#define SQL_C_SLONGINT      (-51)  /* Signed long int */
 #define SQL_C_ULONG         (-13)
 #define SQL_C_INT           (-6)
 #define SQL_C_BIGINT        (-8)
@@ -112,6 +141,10 @@ typedef double   SQLDOUBLE;
 #define SQL_C_TYPE_DATE     (-8)
 #define SQL_C_TYPE_TIME     (-9)
 #define SQL_C_TYPE_TIMESTAMP (-10)
+/* Additional ODBC 3.x types */
+#define SQL_C_DATE          9
+#define SQL_C_TIME          10
+#define SQL_C_TIMESTAMP     11
 #define SQL_C_INTERVAL_YEAR         (-112)
 #define SQL_C_INTERVAL_MONTH        (-113)
 #define SQL_C_INTERVAL_DAY          (-114)
@@ -394,6 +427,77 @@ typedef double   SQLDOUBLE;
 #define SQL_TXN_CAPABLE                   27
 #define SQL_USER_NAME                     30
 
+/* SQLGetInfo info type codes */
+#define SQL_INFO_ACCESSIBLE_TABLES        1
+#define SQL_INFO_ACCESSIBLE_PROCEDURES    2
+#define SQL_INFO_AGENT_NAME               3
+#define SQL_INFO_AGENT_VER                4
+#define SQL_INFO_AUTO_COMMIT              5
+#define SQL_INFO_BATCH_SUPPORT            6
+#define SQL_INFO_CATALOG_LOCATION         7
+#define SQL_INFO_CATALOG_NAME             8
+#define SQL_INFO_CATALOG_TERM             9
+#define SQL_INFO_CATALOG_USAGE            10
+#define SQL_INFO_CLIENT_VERSION           11
+#define SQL_INFO_CONCAT_NULL_BEHAVIOR     12
+#define SQL_INFO_CURSOR_COMMIT_BEHAVIOR   13
+#define SQL_INFO_CURSOR_ROLLBACK_BEHAVIOR 14
+#define SQL_DATA_SOURCE_NAME              15
+#define SQL_DBMS_NAME                     16
+#define SQL_DBMS_VER                      17
+#define SQL_DEFAULT_TXN_ISOLATION         18
+#define SQL_DRIVER_HDESC                  19
+#define SQL_DRIVER_HLIB                   20
+#define SQL_DRIVER_HSTMT                  21
+#define SQL_DRIVER_HENV                   22
+#define SQL_DRIVER_NAME                   23
+#define SQL_DRIVER_VER                    24
+#define SQL_FILE_USAGE                    25
+#define SQL_GETDATA_EXTENSIONS            26
+#define SQL_IDENTIFIER_QUOTE_CHAR         27
+#define SQL_INFO_SCHEMA_SQL_CONFORMANCE   28
+#define SQL_KEYWORDS                      29
+#define SQL_LIKE_ESCAPE_CLAUSE            31
+#define SQL_MAX_CATALOG_NAME_LEN          32
+#define SQL_MAX_COLUMN_NAME_LEN           33
+#define SQL_MAX_COLUMNS_IN_GROUP_BY       34
+#define SQL_MAX_COLUMNS_IN_INDEX          35
+#define SQL_MAX_COLUMNS_IN_ORDER_BY       36
+#define SQL_MAX_COLUMNS_IN_SELECT         37
+#define SQL_MAX_COLUMNS_IN_TABLE          38
+#define SQL_MAX_CONNECTIONS               39
+#define SQL_MAX_CURSOR_NAME_LEN           40
+#define SQL_MAX_IDENTIFIER_LEN            41
+#define SQL_MAX_INDEX_SIZE                42
+#define SQL_MAX_SCHEMA_NAME_LEN           43
+#define SQL_MAX_TABLE_NAME_LEN            44
+#define SQL_MAX_TABLES_IN_SELECT          45
+#define SQL_NEED_LONG_DATA_LEN            46
+#define SQL_NON_NULLABLE_COLUMNS          47
+#define SQL_NULL_COLLATION                48
+#define SQL_ODBC_API_CONFORMANCE          49
+#define SQL_ODBC_SQL_CONFORMANCE          50
+#define SQL_ODBC_VER                      51
+#define SQL_OJ_CAPABILITIES               52
+#define SQL_ORDER_BY_COLUMNS_IN_SELECT    53
+#define SQL_PARAM_ARRAY_ROW_SETS          54
+#define SQL_PARAM_ARRAY_ROW_SETS_TIMEOUT  55
+#define SQL_PARAM_ARRAY_UPDATE_THRESHOLD  56
+#define SQL_PROCEDURES                    57
+#define SQL_QUOTED_IDENTIFIER_CASE        58
+#define SQL_ROW_UPDATABILITY              59
+#define SQL_SCHEMA_TERM                   60
+#define SQL_SERVER_NAME                   61
+#define SQL_SPECIAL_CHARACTERS            62
+#define SQL_STATIC_CURSOR_ATTRIBUTES1     63
+#define SQL_STATIC_CURSOR_ATTRIBUTES2     64
+#define SQL_SYSTEM_FUNCTIONS              65
+#define SQL_TABLE_TYPES                   66
+#define SQL_TXN_ISOLATION_OPTION          67
+#define SQL_UNICODE_CHAR_BASE_TYPE        68
+#define SQL_USER_NAME                     69
+#define SQL_XOPEN_CLI_YEAR                70
+
 #define SQL_TXN_CAPABLE_NOT               0
 #define SQL_TXN_CAPABLE_READ              1
 #define SQL_TXN_CAPABLE_WRITE             2
@@ -402,6 +506,57 @@ typedef double   SQLDOUBLE;
 #define SQL_TXN_READ_COMMITTED            2
 #define SQL_TXN_REPEATABLE_READ           3
 #define SQL_TXN_SERIALIZABLE              4
+
+/* SQLGetInfo return value constants */
+#define SQL_CL_START                      0
+#define SQL_CL_END                        1
+#define SQL_CL_START_END                  2
+#define SQL_CU_PROCEDURE_COLUMN           1
+#define SQL_CU_TABLE_COLUMN               2
+#define SQL_CSB_NULL                      0
+#define SQL_CSB_FIRST                     1
+#define SQL_CSB_LAST                      2
+#define SQL_CC_CLOSE                      0
+#define SQL_CC_CANCEL_ALL                 1
+#define SQL_CC_SAVEPOINT                   2
+#define SQL_CC_TRANSACTed                 3
+#define SQL_IU_MAX                        0
+#define SQL_NNC_NON_NULL                  0
+#define SQL_NNC_ALL_NULL                  1
+#define SQL_NNC_MIXED                     2
+#define SQL_NC_START                      0
+#define SQL_NC_END                        1
+#define SQL_NC_WITH_LOW_PRECEDENCE        2
+#define SQL_NC_WITH_HIGH_PRECEDENCE       3
+#define SQL_OAC_LEVEL_1                   0
+#define SQL_OAC_LEVEL_2                   1
+#define SQL_OAC_LEVEL_3                   2
+#define SQL_OSC_MINIMUM                   0
+#define SQL_OSC_CORE                      1
+#define SQL_OSC_EXTENDED                  2
+#define SQL_IC_SENSITIVE                  0
+#define SQL_IC_INSENSITIVE                1
+#define SQL_IC_NONE                       2
+#define SQLRU_NEVER_UPDATABLE             0
+#define SQLRU_KEYSET_UPDATABLE            1
+#define SQLRU_DYNAMICALLY_UPDATABLE       2
+#define SQL_SCA_SENSITIVE                 0
+#define SQL_SCA_INSENSITIVE               1
+#define SQL_SCA_NO_SCROLL_CURSORS         2
+#define SQL_SF_LOCATE_U                   0
+#define SQL_WCHAR                         1
+#define SQL_GD_ANY_COLUMN                 0
+#define SQL_GD_ANY_ORDER                  1
+#define SQL_BATCH_ROWSET                  0
+#define SQL_BATCH_SINGULAR_MSG            1
+#define SQL_OJ_LEFT                       0
+#define SQL_OJ_RIGHT                      1
+#define SQL_OJ_FULL                       2
+#define SQL_OJ_NESTED                     3
+#define SQL_OJ_NOT_DEFERRABLE             4
+
+/* Version string */
+#define TRINO_ODBC_VERSION_STR            "1.0.0"
 
 /* ========================================================================
  * Column Searchability
@@ -514,6 +669,42 @@ typedef double   SQLDOUBLE;
 #define SQL_UNIQUE                      1
 #define SQL_BEST                        2
 #define SQL_ALL                         3
+
+/* ========================================================================
+ * Function codes for SQLGetFunctions
+ * ======================================================================== */
+
+#define SQL_FN_SQL_ALLOCHANDLE          (1 << 0)
+#define SQL_FN_SQL_ALLOCstmt            (1 << 1)
+#define SQL_FN_SQL_BINDCOL              (1 << 2)
+#define SQL_FN_SQL_BINDPARAM            (1 << 3)
+#define SQL_FN_SQL_COLATTRIBUTE         (1 << 4)
+#define SQL_FN_SQL_COLUMNPRIVILEGES     (1 << 5)
+#define SQL_FN_SQL_COLUMNS              (1 << 6)
+#define SQL_FN_SQL_CONNECT              (1 << 7)
+#define SQL_FN_SQL_DATASOURCES          (1 << 8)
+#define SQL_FN_SQL_DESCRIBE             (1 << 9)
+#define SQL_FN_SQL_DRIVERCONNECT        (1 << 10)
+#define SQL_FN_SQL_DRIVERS              (1 << 11)
+#define SQL_FN_SQL_EXEC_DIRECT          (1 << 12)
+#define SQL_FN_SQL_FETCH                (1 << 13)
+#define SQL_FN_SQL_GETDATA              (1 << 14)
+#define SQL_FN_SQL_GETDIAGFIELD         (1 << 15)
+#define SQL_FN_SQL_GETDIAGREC           (1 << 16)
+#define SQL_FN_SQL_GETINFO              (1 << 17)
+#define SQL_FN_SQL_NUMRESULTCOLS        (1 << 18)
+#define SQL_FN_SQL_NUMPARAMS            (1 << 19)
+#define SQL_FN_SQL_PARAMDATA            (1 << 20)
+#define SQL_FN_SQL_PREPARE              (1 << 21)
+#define SQL_FN_SQL_PRIMARYKEYS          (1 << 22)
+#define SQL_FN_SQL_PROCCOLUMNS          (1 << 23)
+#define SQL_FN_SQL_PROCEDURES           (1 << 24)
+#define SQL_FN_SQL_ROWCOUNT             (1 << 25)
+#define SQL_FN_SQL_SETPos               (1 << 26)
+#define SQL_FN_SQL_SPECIALCOLUMNS       (1 << 27)
+#define SQL_FN_SQL_STATISTICS           (1 << 28)
+#define SQL_FN_SQL_TABLES               (1 << 29)
+#define SQL_FN_SQL_TABLEPRIVILEGES      (1 << 30)
 
 /* ========================================================================
  * Trino-specific extensions

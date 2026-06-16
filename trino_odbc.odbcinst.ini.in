@@ -1,0 +1,9 @@
+[Trino ODBC Driver]
+Description=Trino ODBC Driver
+Driver=@CMAKE_INSTALL_PREFIX@/lib/libtrino_odbc.so
+Setup=
+FileUsage=1
+UnicodeUsage=2
+DriverODBCVer=03.80
+ConnectFunctions=YYY
+APILevel=2

@@ -8,10 +8,12 @@ set(CORE_SOURCES
 set(CONNECTION_SOURCES
     ${CMAKE_SOURCE_DIR}/src/connection/connection.c
     ${CMAKE_SOURCE_DIR}/src/connection/connection_pool.c
+    ${CMAKE_SOURCE_DIR}/src/connection/info.c
 )
 
 set(STATEMENT_SOURCES
     ${CMAKE_SOURCE_DIR}/src/statement/statement.c
+    ${CMAKE_SOURCE_DIR}/src/statement/setpos.c
     ${CMAKE_SOURCE_DIR}/src/statement/prepared.c
 )
 
@@ -24,6 +26,7 @@ set(PROTOCOL_SOURCES
     ${CMAKE_SOURCE_DIR}/src/protocol/client.c
     ${CMAKE_SOURCE_DIR}/src/protocol/request.c
     ${CMAKE_SOURCE_DIR}/src/protocol/response.c
+    ${CMAKE_SOURCE_DIR}/src/protocol/wchar.c
 )
 
 set(AUTH_SOURCES
@@ -37,6 +40,14 @@ set(ERROR_SOURCES
     ${CMAKE_SOURCE_DIR}/src/error/state.c
 )
 
+set(CATALOG_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/catalog/catalog.c
+)
+
+set(TRANSACTION_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/transaction/transaction.c
+)
+
 # Add the shared library
 add_library(trino_odbc SHARED
     ${CORE_SOURCES}
@@ -46,6 +57,8 @@ add_library(trino_odbc SHARED
     ${PROTOCOL_SOURCES}
     ${AUTH_SOURCES}
     ${ERROR_SOURCES}
+    ${CATALOG_SOURCES}
+    ${TRANSACTION_SOURCES}
 )
 
 # Link dependencies
