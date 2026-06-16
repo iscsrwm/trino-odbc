@@ -1,8 +1,10 @@
 #include "trino_odbc/statement.h"
+#include "trino_odbc/connection.h"
 #include "trino_odbc/resultset.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 /* ========================================================================
  * Statement lifecycle
@@ -64,7 +66,7 @@ void trino_stmt_destroy(trino_stmt_t *stmt)
  * SQLPrepare
  * ======================================================================== */
 
-SQLRETURN SQLPrepare(SQLHSTMT statement_handle, const SQLCHAR *statement_text,
+SQLRETURN SQLPrepare(SQLHSTMT statement_handle, SQLCHAR *statement_text,
                      SQLINTEGER text_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
@@ -138,7 +140,7 @@ SQLRETURN SQLExecute(SQLHSTMT statement_handle)
  * SQLExecDirect
  * ======================================================================== */
 
-SQLRETURN SQLExecDirect(SQLHSTMT statement_handle, const SQLCHAR *statement_text,
+SQLRETURN SQLExecDirect(SQLHSTMT statement_handle, SQLCHAR *statement_text,
                         SQLINTEGER text_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
@@ -204,9 +206,22 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
     client->request_timeout = stmt->query_timeout;
     curl_easy_setopt(client->easy_handle, CURLOPT_TIMEOUT, (long)stmt->query_timeout);
 
+    /* Substitute any bound parameters into the SQL text before sending. */
+    char *final_sql = trino_stmt_apply_params(stmt, sql);
+    if (!final_sql) {
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_MEMORY_ALLOCATION,
+                             0, "Failed to bind parameters");
+        trino_http_client_destroy(client);
+        pthread_mutex_unlock(&stmt->mutex);
+        return SQL_ERROR;
+    }
+
     /* Execute query */
     SQLRETURN retcode = SQL_SUCCESS;
-    trino_query_results_t *results = trino_http_client_query(client, sql, &retcode);
+    trino_query_results_t *results = trino_http_client_query(client,
+                                                             (const SQLCHAR *)final_sql,
+                                                             &retcode);
+    free(final_sql);
 
     if (!results) {
         trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_REQUEST_FAILED,
@@ -242,7 +257,9 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
         stmt->column_count = 0;
         stmt->executed = true;
         stmt->at_end = true;
-        /* Write operations don't return result sets */
+        /* Write operations don't return result sets; the stats we needed have
+         * been copied above, so release the results now. */
+        trino_query_results_free(results);
         stmt->resultset = NULL;
     } else {
         /* Read operation - set up result set */
@@ -263,9 +280,9 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
                 rec->sql_type = col->odbc_type;
                 rec->nullable = col->nullable;
                 strncpy((char *)rec->column_name, (char *)col->name,
-                        SQL_MAX_IDENTIFIER_LEN);
+                        TRINO_MAX_IDENTIFIER_LEN);
                 strncpy((char *)rec->type_name, (char *)col->type,
-                        SQL_MAX_IDENTIFIER_LEN);
+                        TRINO_MAX_IDENTIFIER_LEN);
             }
             stmt->ird->record_count = results->column_count;
         }
@@ -357,8 +374,8 @@ SQLRETURN SQLRowCount(SQLHSTMT statement_handle, SQLLEN *row_count_ptr)
  * ======================================================================== */
 
 SQLRETURN SQLColAttribute(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
-                          SQLINTEGER field_identifier, SQLCHAR *character_attribute,
-                          SQLINTEGER buffer_length, SQLINTEGER *string_length,
+                          SQLUSMALLINT field_identifier, SQLPOINTER character_attribute,
+                          SQLSMALLINT buffer_length, SQLSMALLINT *string_length,
                           SQLLEN *numeric_attribute)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
@@ -366,9 +383,14 @@ SQLRETURN SQLColAttribute(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
     if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
 
-    return trino_stmt_col_attribute(stmt, column_number, field_identifier,
-                                    character_attribute, buffer_length,
-                                    string_length, numeric_attribute);
+    SQLINTEGER str_len = 0;
+    SQLRETURN ret = trino_stmt_col_attribute(stmt, column_number,
+                                             (SQLINTEGER)field_identifier,
+                                             (SQLCHAR *)character_attribute,
+                                             (SQLBUFFER_LENGTH)buffer_length,
+                                             &str_len, numeric_attribute);
+    if (string_length) *string_length = (SQLSMALLINT)str_len;
+    return ret;
 }
 
 SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col,

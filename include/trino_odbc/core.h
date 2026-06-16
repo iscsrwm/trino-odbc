@@ -27,8 +27,8 @@ typedef enum {
 typedef struct {
     SQLSMALLINT sql_type;
     SQLSMALLINT c_type;
-    SQLCHAR     column_name[SQL_MAX_IDENTIFIER_LEN + 1];
-    SQLCHAR     type_name[SQL_MAX_IDENTIFIER_LEN + 1];
+    SQLCHAR     column_name[TRINO_MAX_IDENTIFIER_LEN + 1];
+    SQLCHAR     type_name[TRINO_MAX_IDENTIFIER_LEN + 1];
     SQLULEN     column_size;
     SQLPOINTER  data_ptr;
     SQLLEN     buffer_length;

@@ -22,6 +22,9 @@ SQLRETURN trino_stmt_bind_param(trino_stmt_t *stmt, SQLUSMALLINT param_number,
                                 SQLPOINTER parameter_value, SQLLEN *str_len_or_ind);
 SQLULEN   trino_stmt_num_params(trino_stmt_t *stmt);
 
+/* Produce final SQL with bound parameters substituted (caller frees result). */
+char     *trino_stmt_apply_params(trino_stmt_t *stmt, const SQLCHAR *sql);
+
 /* Statement attributes */
 SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER value, SQLINTEGER str_len);
 SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER value,

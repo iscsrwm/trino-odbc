@@ -1,4 +1,5 @@
 #include "trino_odbc/resultset.h"
+#include "trino_odbc/connection.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -27,8 +28,13 @@ void trino_resultset_destroy(trino_resultset_t *rs)
 {
     if (!rs) return;
 
-    /* Do NOT free query_results here — ownership stays with the caller */
-    memset(rs, 0, sizeof(*rs));
+    /* The result set takes ownership of the query results once created via
+     * trino_resultset_create(), so free them here. */
+    if (rs->query_results) {
+        trino_query_results_free(rs->query_results);
+        rs->query_results = NULL;
+    }
+
     free(rs);
 }
 
@@ -57,108 +63,127 @@ SQLRETURN SQLFetch(SQLHSTMT statement_handle)
     if (!stmt->resultset) return SQL_NO_DATA;
 
     trino_resultset_t *rs = (trino_resultset_t *)stmt->resultset;
+    trino_query_results_t *qr = rs->query_results;
+    if (!qr) return SQL_NO_DATA;
 
-    /* Check if we need to fetch more data from server */
-    if (rs->current_row >= rs->row_count) {
-        if (rs->query_results->next_uri) {
-            /* Need to fetch next batch — for now just mark as done */
+    /* current_row is a 1-based cursor position (0 == before the first row).
+     * Row data for the current position lives at qr->rows[current_row - 1]. */
+
+    /* If we have consumed all locally buffered rows, try to pull the next page
+     * from the server before declaring end-of-data. */
+    while (rs->current_row >= qr->row_count) {
+        if (!qr->next_uri) {
             rs->at_end = true;
             return SQL_NO_DATA;
         }
-        return SQL_NO_DATA;
+
+        trino_http_client_t *client =
+            stmt->conn ? trino_conn_get_http_client(stmt->conn) : NULL;
+        if (!client) {
+            rs->at_end = true;
+            return SQL_NO_DATA;
+        }
+
+        SQLRETURN fr = trino_http_client_fetch_next(client, qr);
+        trino_http_client_destroy(client);
+
+        if (fr == SQL_ERROR) {
+            return SQL_ERROR;
+        }
+        if (fr == SQL_NO_DATA && qr->next_uri == NULL &&
+            rs->current_row >= qr->row_count) {
+            rs->at_end = true;
+            return SQL_NO_DATA;
+        }
+        /* Loop again: a page may have arrived with zero new rows but a further
+         * nextUri, or with rows that satisfy the cursor advance below. */
+        if (qr->next_uri == NULL && rs->current_row >= qr->row_count) {
+            rs->at_end = true;
+            return SQL_NO_DATA;
+        }
     }
 
-    /* Advance to next row */
+    /* Advance to the next row. */
     rs->current_row++;
+    rs->row_count = qr->row_count;
     stmt->current_row = rs->current_row;
-    stmt->row_count = (SQLLEN)rs->current_row;
-
-    if (rs->current_row >= rs->row_count) {
-        rs->at_end = true;
-    }
 
     return SQL_SUCCESS;
 }
 
+/* Advance the cursor by one row, pulling further pages as needed. Uses the
+ * 1-based position model (see SQLFetch). `client` may be NULL, in which case
+ * no further pages are fetched. */
 SQLRETURN trino_resultset_fetch(trino_resultset_t *rs, trino_http_client_t *client)
 {
-    if (!rs) return SQL_ERROR;
+    if (!rs || !rs->query_results) return SQL_ERROR;
+    trino_query_results_t *qr = rs->query_results;
 
-    /* If we still have local rows, just advance */
-    if (rs->current_row < rs->row_count) {
-        rs->current_row++;
-        return SQL_SUCCESS;
-    }
-
-    /* Need to fetch next batch from server */
-    if (rs->query_results && rs->query_results->next_uri && client) {
-        SQLRETURN ret = trino_http_client_fetch_next(client, rs->query_results);
-        if (ret == SQL_ERROR) return SQL_ERROR;
-        if (ret == SQL_NO_DATA) {
+    while (rs->current_row >= qr->row_count) {
+        if (!qr->next_uri || !client) {
             rs->at_end = true;
             return SQL_NO_DATA;
         }
-        rs->current_row = 0;
-        rs->needs_fetch = false;
-        return SQL_SUCCESS;
+        SQLRETURN ret = trino_http_client_fetch_next(client, qr);
+        if (ret == SQL_ERROR) return SQL_ERROR;
+        if (qr->next_uri == NULL && rs->current_row >= qr->row_count) {
+            rs->at_end = true;
+            return SQL_NO_DATA;
+        }
     }
 
-    rs->at_end = true;
-    return SQL_NO_DATA;
+    rs->current_row++;
+    rs->row_count = qr->row_count;
+    return SQL_SUCCESS;
 }
 
 SQLRETURN trino_resultset_fetch_scroll(trino_resultset_t *rs, SQLINTEGER orientation,
                                        SQLROWID offset, trino_http_client_t *client)
 {
-    (void)client;
-
-    if (!rs) return SQL_ERROR;
+    if (!rs || !rs->query_results) return SQL_ERROR;
+    trino_query_results_t *qr = rs->query_results;
 
     switch (orientation) {
         case SQL_FETCH_NEXT:
-            return trino_resultset_fetch(rs, NULL);
+            return trino_resultset_fetch(rs, client);
 
         case SQL_FETCH_FIRST:
             rs->current_row = 0;
-            return trino_resultset_fetch(rs, NULL);
-
-        case SQL_FETCH_LAST:
-            /* For forward-only cursors, fetch until end */
-            while (rs->current_row < rs->row_count) {
-                trino_resultset_fetch(rs, NULL);
-            }
-            return SQL_SUCCESS;
+            return trino_resultset_fetch(rs, client);
 
         case SQL_FETCH_ABSOLUTE:
-            if (offset > 0) {
-                rs->current_row = (SQLULEN)(offset - 1);
+            /* Position directly at the 1-based offset (only valid within the
+             * rows already buffered locally). */
+            if (offset > 0 && (SQLULEN)offset <= qr->row_count) {
+                rs->current_row = (SQLULEN)offset;
+                return SQL_SUCCESS;
             }
-            return SQL_SUCCESS;
+            return SQL_NO_DATA;
 
-        case SQL_FETCH_RELATIVE:
-            if (offset >= 0) {
-                rs->current_row += (SQLULEN)offset;
-            } else {
-                /* Backward fetch - only for scrollable cursors */
-                if (rs->cursor_type == SQL_CURSOR_FORWARD_ONLY) {
-                    return SQL_ERROR;
-                }
-                SQLLEN new_pos = (SQLLEN)rs->current_row + offset;
-                if (new_pos >= 0) {
-                    rs->current_row = (SQLULEN)new_pos;
-                } else {
-                    rs->current_row = 0;
-                }
+        case SQL_FETCH_RELATIVE: {
+            if (rs->cursor_type == SQL_CURSOR_FORWARD_ONLY && offset < 1) {
+                return SQL_ERROR;
             }
-            return trino_resultset_fetch(rs, NULL);
+            SQLLEN new_pos = (SQLLEN)rs->current_row + offset;
+            if (new_pos < 1 || (SQLULEN)new_pos > qr->row_count) {
+                return SQL_NO_DATA;
+            }
+            rs->current_row = (SQLULEN)new_pos;
+            return SQL_SUCCESS;
+        }
+
+        case SQL_FETCH_LAST:
+            if (qr->row_count == 0) return SQL_NO_DATA;
+            rs->current_row = qr->row_count;
+            return SQL_SUCCESS;
 
         default:
             return SQL_ERROR;
     }
 }
 
-SQLRETURN SQLFetchScroll(SQLHSTMT statement_handle, SQLINTEGER fetch_orientation,
-                         SQLINTEGER fetch_offset)
+SQLRETURN SQLFetchScroll(SQLHSTMT statement_handle, SQLSMALLINT fetch_orientation,
+                         SQLLEN fetch_offset)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -168,12 +193,19 @@ SQLRETURN SQLFetchScroll(SQLHSTMT statement_handle, SQLINTEGER fetch_orientation
 
     trino_resultset_t *rs = (trino_resultset_t *)stmt->resultset;
 
+    /* A client is only needed to page forward; create one on demand. */
+    trino_http_client_t *client = NULL;
+    if (fetch_orientation == SQL_FETCH_NEXT && stmt->conn) {
+        client = trino_conn_get_http_client(stmt->conn);
+    }
+
     SQLRETURN ret = trino_resultset_fetch_scroll(rs, fetch_orientation,
-                                                  (SQLROWID)fetch_offset, NULL);
+                                                  (SQLROWID)fetch_offset, client);
+
+    if (client) trino_http_client_destroy(client);
 
     if (ret == SQL_SUCCESS) {
         stmt->current_row = rs->current_row;
-        stmt->row_count = (SQLLEN)rs->current_row;
     }
 
     return ret;
@@ -207,11 +239,13 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
     if (!rs || !rs->query_results) return SQL_ERROR;
 
     trino_query_results_t *qr = rs->query_results;
-    SQLULEN row = rs->current_row;
 
-    if (row >= qr->row_count) {
+    /* current_row is 1-based; 0 means the cursor is positioned before the
+     * first row (SQLFetch has not been called yet). */
+    if (rs->current_row == 0 || rs->current_row > qr->row_count) {
         return SQL_NO_DATA;
     }
+    SQLULEN row = rs->current_row - 1;
 
     if (col == 0 || col > qr->column_count) {
         return SQL_ERROR;
@@ -266,7 +300,7 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
             return SQL_SUCCESS;
         }
 
-        case SQL_C_BIGINT: {
+        case SQL_C_SBIGINT: {
             if (!value) {
                 if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
                 return SQL_SUCCESS;

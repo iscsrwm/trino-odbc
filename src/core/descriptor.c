@@ -68,7 +68,7 @@ SQLRETURN trino_desc_set_field(trino_descriptor_t *desc, SQLUSMALLINT rec_num,
         case SQL_DESC_TYPE:
             rec->sql_type = *(SQLSMALLINT *)value;
             break;
-        case SQL_DESC_OCTET_LENGTH:
+        case SQL_DESC_LENGTH:
             rec->column_size = *(SQLULEN *)value;
             break;
         case SQL_DESC_PRECISION:
@@ -83,7 +83,7 @@ SQLRETURN trino_desc_set_field(trino_descriptor_t *desc, SQLUSMALLINT rec_num,
         case SQL_DESC_DATA_PTR:
             rec->data_ptr = value;
             break;
-        case SQL_DESC_BUFFER_LENGTH:
+        case SQL_DESC_OCTET_LENGTH:
             rec->buffer_length = *(SQLLEN *)value;
             break;
         case SQL_DESC_INDICATOR_PTR:
@@ -118,9 +118,13 @@ SQLRETURN trino_desc_get_field(trino_descriptor_t *desc, SQLUSMALLINT rec_num,
             *(SQLSMALLINT *)value = rec->sql_type;
             if (str_len) *str_len = (SQLINTEGER)sizeof(SQLSMALLINT);
             break;
-        case SQL_DESC_OCTET_LENGTH:
+        case SQL_DESC_LENGTH:
             *(SQLULEN *)value = rec->column_size;
             if (str_len) *str_len = (SQLINTEGER)sizeof(SQLULEN);
+            break;
+        case SQL_DESC_OCTET_LENGTH:
+            *(SQLLEN *)value = rec->buffer_length;
+            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLLEN);
             break;
         case SQL_DESC_PRECISION:
             *(SQLULEN *)value = rec->column_size;

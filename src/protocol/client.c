@@ -133,84 +133,58 @@ static size_t memchunk_callback(void *contents, size_t size, size_t nmemb, void 
 }
 
 /* ========================================================================
- * Simple JSON helpers (minimal parser for Trino response)
+ * Transport abstraction (real libcurl, or a test hook)
  * ======================================================================== */
 
-/* Find a JSON string value for a key — returns pointer into the string or NULL */
-static const char *json_find_string(const char *json, const char *key)
+static trino_http_transport_fn g_test_transport = NULL;
+static void                    *g_test_transport_ctx = NULL;
+
+void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx)
 {
-    char search[256];
-    snprintf(search, sizeof(search), "\"%s\"", key);
-
-    const char *pos = strstr(json, search);
-    if (!pos) return NULL;
-
-    pos = strchr(pos + strlen(search), ':');
-    if (!pos) return NULL;
-    pos++;
-
-    /* Skip whitespace */
-    while (*pos && isspace((unsigned char)*pos)) pos++;
-
-    if (*pos != '"') return NULL;
-    pos++; /* skip opening quote */
-
-    const char *start = pos;
-    const char *end = strchr(pos, '"');
-    if (!end) return NULL;
-
-    /* Return the string (caller should copy it) */
-    size_t len = (size_t)(end - start);
-    char *result = malloc(len + 1);
-    if (!result) return NULL;
-    memcpy(result, start, len);
-    result[len] = '\0';
-    return (const char *)result;
+    g_test_transport = fn;
+    g_test_transport_ctx = user_ctx;
 }
 
-static int json_find_int(const char *json, const char *key, int default_val)
+/* Perform a single HTTP request, returning the response body as a freshly
+ * allocated NUL-terminated string (caller frees), or NULL on failure.
+ * `headers` is consumed (freed) by this function when libcurl is used. */
+static char *perform_request(trino_http_client_t *client, const char *method,
+                             const char *url, const char *body,
+                             struct curl_slist *headers)
 {
-    char search[256];
-    snprintf(search, sizeof(search), "\"%s\"", key);
+    if (g_test_transport) {
+        if (headers) curl_slist_free_all(headers);
+        return g_test_transport(method, url, body, g_test_transport_ctx);
+    }
 
-    const char *pos = strstr(json, search);
-    if (!pos) return default_val;
+    if (strcmp(method, "GET") == 0) {
+        curl_easy_setopt(client->easy_handle, CURLOPT_URL, url);
+        curl_easy_setopt(client->easy_handle, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(client->easy_handle, CURLOPT_POST, 0L);
+    } else {
+        curl_easy_setopt(client->easy_handle, CURLOPT_URL, url);
+        curl_easy_setopt(client->easy_handle, CURLOPT_POST, 1L);
+        curl_easy_setopt(client->easy_handle, CURLOPT_POSTFIELDS, body ? body : "");
+    }
 
-    pos = strchr(pos + strlen(search), ':');
-    if (!pos) return default_val;
-    pos++;
+    if (headers) {
+        curl_easy_setopt(client->easy_handle, CURLOPT_HTTPHEADER, headers);
+    }
 
-    while (*pos && isspace((unsigned char)*pos)) pos++;
+    memchunk_t chunk = {0};
+    chunk.mem = calloc(1, 1);
+    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEFUNCTION, memchunk_callback);
+    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEDATA, &chunk);
 
-    if (*pos == '"' || *pos == '{' || *pos == '[') return default_val;
+    CURLcode res = curl_easy_perform(client->easy_handle);
 
-    return atoi(pos);
-}
+    if (headers) curl_slist_free_all(headers);
 
-static double json_find_double(const char *json, const char *key, double default_val)
-{
-    char search[256];
-    snprintf(search, sizeof(search), "\"%s\"", key);
-
-    const char *pos = strstr(json, search);
-    if (!pos) return default_val;
-
-    pos = strchr(pos + strlen(search), ':');
-    if (!pos) return default_val;
-    pos++;
-
-    while (*pos && isspace((unsigned char)*pos)) pos++;
-
-    if (*pos == '"' || *pos == '{' || *pos == '[') return default_val;
-
-    return atof(pos);
-}
-
-static bool json_has_key(const char *json, const char *key)
-{
-    char search[256];
-    snprintf(search, sizeof(search), "\"%s\"", key);
-    return strstr(json, search) != NULL;
+    if (res != CURLE_OK) {
+        free(chunk.mem);
+        return NULL;
+    }
+    return chunk.mem; /* caller frees */
 }
 
 /* ========================================================================
@@ -221,7 +195,12 @@ trino_query_results_t *trino_http_client_query(trino_http_client_t *client,
                                                const SQLCHAR *sql,
                                                SQLRETURN *retcode)
 {
-    if (!client || !sql || !client->easy_handle) {
+    if (!client || !sql) {
+        if (retcode) *retcode = SQL_ERROR;
+        return NULL;
+    }
+    /* easy_handle is required only for the real transport. */
+    if (!g_test_transport && !client->easy_handle) {
         if (retcode) *retcode = SQL_ERROR;
         return NULL;
     }
@@ -230,37 +209,28 @@ trino_query_results_t *trino_http_client_query(trino_http_client_t *client,
     char url[1024];
     snprintf(url, sizeof(url), "%s/v1/statement", client->server_url);
 
-    /* Apply authentication */
-    trino_auth_method_t auth = trino_auth_parse(client->auth_type);
-    SQLRETURN auth_ret = trino_auth_apply(client->easy_handle, auth,
-                                          client->user, client->password,
-                                          client->ssl_truststore);
-    if (auth_ret != SQL_SUCCESS) {
-        if (retcode) *retcode = SQL_ERROR;
-        return NULL;
+    /* Apply authentication (real transport only) */
+    if (!g_test_transport) {
+        trino_auth_method_t auth = trino_auth_parse(client->auth_type);
+        SQLRETURN auth_ret = trino_auth_apply(client->easy_handle, auth,
+                                              client->user, client->password,
+                                              client->ssl_truststore);
+        if (auth_ret != SQL_SUCCESS) {
+            if (retcode) *retcode = SQL_ERROR;
+            return NULL;
+        }
     }
 
-    /* Set URL */
-    curl_easy_setopt(client->easy_handle, CURLOPT_URL, url);
-
-    /* Set POST body (SQL text) */
-    curl_easy_setopt(client->easy_handle, CURLOPT_POST, 1L);
-    curl_easy_setopt(client->easy_handle, CURLOPT_POSTFIELDS, (char *)sql);
-
-    /* Set headers */
+    /* Build request headers */
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Accept: application/json");
     headers = curl_slist_append(headers, "Content-Type: text/plain");
-
-    /* Add X-Trino-Client-Tags header if configured */
     if (client->client_tags_json) {
         char tag_header[2048];
         snprintf(tag_header, sizeof(tag_header), "X-Trino-Client-Tags: %s",
                  client->client_tags_json);
         headers = curl_slist_append(headers, tag_header);
     }
-
-    /* Add X-Trino-Source header */
     if (client->source) {
         char source_header[512];
         snprintf(source_header, sizeof(source_header), "X-Trino-Source: %s",
@@ -268,117 +238,58 @@ trino_query_results_t *trino_http_client_query(trino_http_client_t *client,
         headers = curl_slist_append(headers, source_header);
     }
 
-    curl_easy_setopt(client->easy_handle, CURLOPT_HTTPHEADER, headers);
-
-    /* Response capture */
-    memchunk_t chunk = {0};
-    chunk.mem = calloc(1, 1);
-    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEFUNCTION, memchunk_callback);
-    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEDATA, &chunk);
-
-    /* Capture response headers for query ID */
-    char response_header_buf[2048] = {0};
-    size_t header_buf_len = 0;
-
-    CURLcode res = curl_easy_perform(client->easy_handle);
-
-    long http_code = 0;
-    curl_easy_getinfo(client->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
-
-    curl_slist_free_all(headers);
-
-    if (res != CURLE_OK) {
+    char *response = perform_request(client, "POST", url, (const char *)sql, headers);
+    if (!response) {
         if (retcode) *retcode = SQL_ERROR;
-        free(chunk.mem);
         return NULL;
     }
 
     /* Parse response */
     trino_query_results_t *results = calloc(1, sizeof(*results));
     if (!results) {
-        free(chunk.mem);
+        free(response);
         if (retcode) *retcode = SQL_ERROR;
         return NULL;
     }
 
-    const char *json = chunk.mem;
+    SQLRETURN parse_ret = trino_parse_query_response(response, results);
+    free(response);
 
-    /* Extract query ID */
-    const char *qid = json_find_string(json, "id");
-    if (qid) {
-        strncpy((char *)results->query_id, (char *)qid, sizeof(results->query_id) - 1);
-        free((void *)qid);
-    }
-
-    /* Extract nextUri */
-    const char *nuri = json_find_string(json, "nextUri");
-    if (nuri) {
-        results->next_uri = strdup((char *)nuri);
-        free((void *)nuri);
-    }
-
-    /* Check for error */
-    if (json_has_key(json, "error")) {
-        results->has_error = true;
-
-        /* Find error object — simplified parsing */
-        const char *err_pos = strstr(json, "\"error\"");
-        if (err_pos) {
-            const char *name = json_find_string(err_pos, "name");
-            if (name) {
-                results->error_name = strdup((char *)name);
-                free((void *)name);
-            }
-            const char *msg = json_find_string(err_pos, "message");
-            if (msg) {
-                results->error_message = strdup((char *)msg);
-                free((void *)msg);
-            }
-            const char *etype = json_find_string(err_pos, "errorType");
-            if (etype) {
-                results->error_type = strdup((char *)etype);
-                free((void *)etype);
-            }
-        }
-
-        free(chunk.mem);
+    if (parse_ret == SQL_ERROR && results->has_error) {
+        /* Trino reported a query error; surface it to the caller. */
         if (retcode) *retcode = SQL_ERROR;
         return results;
     }
-
-    /* Parse state from stats */
-    const char *state_str = json_find_string(json, "state");
-    if (state_str) {
-        if (strcmp((char *)state_str, "FINISHED") == 0) {
-            results->state = TRINO_QUERY_STATE_FINISHED;
-        } else if (strcmp((char *)state_str, "FAILED") == 0) {
-            results->state = TRINO_QUERY_STATE_FAILED;
-        } else if (strcmp((char *)state_str, "CANCELLED") == 0) {
-            results->state = TRINO_QUERY_STATE_CANCELLED;
-        } else {
-            results->state = TRINO_QUERY_STATE_RUNNING;
-        }
-        free((void *)state_str);
+    if (parse_ret == SQL_ERROR) {
+        /* Malformed response. */
+        trino_query_results_free(results);
+        if (retcode) *retcode = SQL_ERROR;
+        return NULL;
     }
 
-    /* Parse columns — we need a more sophisticated JSON parser for arrays.
-     * For now, we'll use a simple approach. */
-    /* TODO: Implement proper column parsing from JSON array */
-
-    /* Parse data rows */
-    /* TODO: Implement proper row parsing from JSON 2D array */
-
-    /* Parse stats */
-    if (json_has_key(json, "stats")) {
-        const char *stats_pos = strstr(json, "\"stats\"");
-        if (stats_pos) {
-            results->rows_processed = (SQLULEN)json_find_int(stats_pos, "processedRows", 0);
-            results->bytes_processed = (SQLULEN)json_find_int(stats_pos, "processedBytes", 0);
-            results->elapsed_time = json_find_double(stats_pos, "elapsedTime", 0.0);
+    /* The initial POST response typically carries only an id and nextUri; the
+     * column metadata and first rows arrive on subsequent GET pages. Follow the
+     * nextUri chain until columns are known and at least one data page has been
+     * consumed, the query finishes, or there are no further pages. */
+    while (results->next_uri &&
+           (results->columns == NULL || results->row_count == 0) &&
+           results->state != TRINO_QUERY_STATE_FINISHED &&
+           results->state != TRINO_QUERY_STATE_FAILED &&
+           results->state != TRINO_QUERY_STATE_CANCELLED) {
+        SQLRETURN fr = trino_http_client_fetch_next(client, results);
+        if (fr == SQL_ERROR) {
+            if (results->has_error) {
+                if (retcode) *retcode = SQL_ERROR;
+                return results;
+            }
+            trino_query_results_free(results);
+            if (retcode) *retcode = SQL_ERROR;
+            return NULL;
+        }
+        if (fr == SQL_NO_DATA) {
+            break;
         }
     }
-
-    free(chunk.mem);
 
     if (retcode) *retcode = SQL_SUCCESS;
     return results;
@@ -395,82 +306,26 @@ SQLRETURN trino_http_client_fetch_next(trino_http_client_t *client,
         return SQL_NO_DATA;
     }
 
-    /* Clear previous results */
-    /* TODO: Free previous row data */
+    /* Apply authentication (real transport only) */
+    if (!g_test_transport) {
+        trino_auth_method_t auth = trino_auth_parse(client->auth_type);
+        trino_auth_apply(client->easy_handle, auth,
+                         client->user, client->password,
+                         client->ssl_truststore);
+    }
 
-    /* Apply authentication */
-    trino_auth_method_t auth = trino_auth_parse(client->auth_type);
-    trino_auth_apply(client->easy_handle, auth,
-                     client->user, client->password,
-                     client->ssl_truststore);
-
-    /* GET nextUri */
-    curl_easy_setopt(client->easy_handle, CURLOPT_URL, results->next_uri);
-    curl_easy_setopt(client->easy_handle, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(client->easy_handle, CURLOPT_POST, 0L);
-
-    memchunk_t chunk = {0};
-    chunk.mem = calloc(1, 1);
-    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEFUNCTION, memchunk_callback);
-    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEDATA, &chunk);
-
-    CURLcode res = curl_easy_perform(client->easy_handle);
-
-    long http_code = 0;
-    curl_easy_getinfo(client->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
-
-    if (res != CURLE_OK) {
-        free(chunk.mem);
+    char *response = perform_request(client, "GET",
+                                     (const char *)results->next_uri, NULL, NULL);
+    if (!response) {
         return SQL_ERROR;
     }
 
-    /* Parse response — same structure as initial query response */
-    const char *json = chunk.mem;
+    /* trino_parse_query_response updates nextUri/state/stats, parses columns if
+     * not yet known, and appends this page's data rows to results->rows. */
+    SQLRETURN parse_ret = trino_parse_query_response(response, results);
+    free(response);
 
-    /* Update nextUri */
-    free(results->next_uri);
-    results->next_uri = NULL;
-    const char *nuri = json_find_string(json, "nextUri");
-    if (nuri) {
-        results->next_uri = strdup((char *)nuri);
-        free((void *)nuri);
-    }
-
-    /* Check for error */
-    if (json_has_key(json, "error")) {
-        results->has_error = true;
-        const char *err_pos = strstr(json, "\"error\"");
-        if (err_pos) {
-            const char *name = json_find_string(err_pos, "name");
-            if (name) {
-                results->error_name = strdup((char *)name);
-                free((void *)name);
-            }
-            const char *msg = json_find_string(err_pos, "message");
-            if (msg) {
-                results->error_message = strdup((char *)msg);
-                free((void *)msg);
-            }
-        }
-        free(chunk.mem);
-        return SQL_ERROR;
-    }
-
-    /* Update state */
-    const char *state_str = json_find_string(json, "state");
-    if (state_str) {
-        if (strcmp((char *)state_str, "FINISHED") == 0) {
-            results->state = TRINO_QUERY_STATE_FINISHED;
-        } else if (strcmp((char *)state_str, "FAILED") == 0) {
-            results->state = TRINO_QUERY_STATE_FAILED;
-        }
-        free((void *)state_str);
-    }
-
-    /* TODO: Parse new rows from data array */
-
-    free(chunk.mem);
-    return SQL_SUCCESS;
+    return parse_ret;
 }
 
 /* ========================================================================

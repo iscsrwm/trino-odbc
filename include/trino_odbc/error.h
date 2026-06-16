@@ -10,7 +10,7 @@
 typedef struct {
     SQLCHAR   sqlstate[6];
     SQLINTEGER native_error;
-    SQLCHAR   message_text[SQL_MAX_MESSAGE_LEN];
+    SQLCHAR   message_text[TRINO_MAX_MESSAGE_LEN];
     SQLSMALLINT message_len;
 } trino_diag_record_t;
 

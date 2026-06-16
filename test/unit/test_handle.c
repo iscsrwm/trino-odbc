@@ -4,6 +4,7 @@
 #include "trino_odbc.h"
 #include "trino_odbc/core.h"
 #include "trino_odbc/error.h"
+#include "trino_odbc/protocol.h"
 
 /* Shared test counters — defined in test_connection_string.c */
 int tests_run = 0;

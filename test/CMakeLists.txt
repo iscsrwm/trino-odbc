@@ -23,6 +23,16 @@ target_include_directories(integration_tests PRIVATE ${CMAKE_SOURCE_DIR}/include
 add_test(NAME integration_tests COMMAND integration_tests)
 set_tests_properties(integration_tests PROPERTIES LABELS "integration")
 
+# End-to-end tests (full execute/fetch/getdata path via a mock HTTP transport)
+add_executable(e2e_tests
+    ${CMAKE_SOURCE_DIR}/test/integration/test_e2e_query.c
+)
+
+target_link_libraries(e2e_tests PRIVATE trino_odbc CURL::libcurl Threads::Threads)
+target_include_directories(e2e_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME e2e_tests COMMAND e2e_tests)
+set_tests_properties(e2e_tests PROPERTIES LABELS "integration")
+
 # Installation targets
 install(TARGETS trino_odbc
     LIBRARY DESTINATION lib${LIB_SUFFIX}

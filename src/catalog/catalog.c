@@ -11,15 +11,20 @@
  * Helper: build pattern string for LIKE clause
  * ======================================================================== */
 
-static void build_pattern(const SQLCHAR *pattern, SQLULEN pattern_len, char *out, size_t out_size)
+static void build_pattern(const SQLCHAR *pattern, SQLSMALLINT pattern_len, char *out, size_t out_size)
 {
-    if (!pattern || pattern_len == 0 || pattern_len == SQL_NTS) {
+    /* Resolve null-terminated strings to their actual length. */
+    if (pattern && pattern_len == SQL_NTS) {
+        pattern_len = (SQLSMALLINT)strlen((const char *)pattern);
+    }
+    if (!pattern || pattern_len <= 0) {
         strcpy(out, "'%'");
     } else {
         size_t i = 0;
         out[i++] = '\'';
         size_t p = 0;
-        while (p < pattern_len && i < out_size - 3) {
+        size_t plen = (size_t)pattern_len;
+        while (p < plen && i < out_size - 3) {
             if (pattern[p] == '_') {
                 out[i++] = '\\';
                 out[i++] = '_';
@@ -56,10 +61,10 @@ static const char *get_catalog_or_default(trino_conn_t *conn)
  * ======================================================================== */
 
 SQLRETURN SQLTables(SQLHSTMT statement_handle,
-                    const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                    const SQLCHAR *schema_pattern, SQLULEN schema_pattern_length,
-                    const SQLCHAR *table_pattern, SQLULEN table_pattern_length,
-                    const SQLCHAR *types, SQLULEN types_length)
+                    SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                    SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
+                    SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length,
+                    SQLCHAR *types, SQLSMALLINT types_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -80,22 +85,26 @@ SQLRETURN SQLTables(SQLHSTMT statement_handle,
     build_pattern(table_pattern, table_pattern_length, table_pat, sizeof(table_pat));
 
     /* Build types pattern */
-    if (!types || types_length == 0 || (SQLULEN)SQL_NTS == types_length) {
+    if (types && types_length == SQL_NTS) {
+        types_length = (SQLSMALLINT)strlen((const char *)types);
+    }
+    if (!types || types_length <= 0) {
         strcpy(types_pat, "('TABLE','VIEW')");
     } else {
         /* Convert comma-separated types to SQL IN clause */
+        size_t types_len = (size_t)types_length;
         size_t i = 0;
         types_pat[i++] = '(';
         size_t t = 0;
         bool first = true;
-        while (t < types_length) {
+        while (t < types_len) {
             if (types[t] == ',') {
                 t++;
                 continue;
             }
             /* Find end of this type */
             size_t start = t;
-            while (t < types_length && types[t] != ',') t++;
+            while (t < types_len && types[t] != ',') t++;
             if (!first) types_pat[i++] = ',';
             first = false;
             types_pat[i++] = '\'';
@@ -139,10 +148,10 @@ SQLRETURN SQLTables(SQLHSTMT statement_handle,
  * ======================================================================== */
 
 SQLRETURN SQLColumns(SQLHSTMT statement_handle,
-                     const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                     const SQLCHAR *schema_pattern, SQLULEN schema_pattern_length,
-                     const SQLCHAR *table_pattern, SQLULEN table_pattern_length,
-                     const SQLCHAR *column_pattern, SQLULEN column_pattern_length)
+                     SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                     SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
+                     SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length,
+                     SQLCHAR *column_pattern, SQLSMALLINT column_pattern_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -214,9 +223,9 @@ SQLRETURN SQLColumns(SQLHSTMT statement_handle,
  * ======================================================================== */
 
 SQLRETURN SQLPrimaryKeys(SQLHSTMT statement_handle,
-                         const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                         const SQLCHAR *schema_name, SQLULEN schema_name_length,
-                         const SQLCHAR *table_name, SQLULEN table_name_length)
+                         SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                         SQLCHAR *schema_name, SQLSMALLINT schema_name_length,
+                         SQLCHAR *table_name, SQLSMALLINT table_name_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -259,12 +268,12 @@ SQLRETURN SQLPrimaryKeys(SQLHSTMT statement_handle,
  * ======================================================================== */
 
 SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle,
-                         const SQLCHAR *pk_catalog, SQLULEN pk_catalog_length,
-                         const SQLCHAR *pk_schema, SQLULEN pk_schema_length,
-                         const SQLCHAR *pk_table, SQLULEN pk_table_length,
-                         const SQLCHAR *fk_catalog, SQLULEN fk_catalog_length,
-                         const SQLCHAR *fk_schema, SQLULEN fk_schema_length,
-                         const SQLCHAR *fk_table, SQLULEN fk_table_length)
+                         SQLCHAR *pk_catalog, SQLSMALLINT pk_catalog_length,
+                         SQLCHAR *pk_schema, SQLSMALLINT pk_schema_length,
+                         SQLCHAR *pk_table, SQLSMALLINT pk_table_length,
+                         SQLCHAR *fk_catalog, SQLSMALLINT fk_catalog_length,
+                         SQLCHAR *fk_schema, SQLSMALLINT fk_schema_length,
+                         SQLCHAR *fk_table, SQLSMALLINT fk_table_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -326,10 +335,10 @@ SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle,
  * SQLGetTablePrivileges
  * ======================================================================== */
 
-SQLRETURN SQLGetTablePrivileges(SQLHSTMT statement_handle,
-                                const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                                const SQLCHAR *schema_pattern, SQLULEN schema_pattern_length,
-                                const SQLCHAR *table_pattern, SQLULEN table_pattern_length)
+SQLRETURN SQLTablePrivileges(SQLHSTMT statement_handle,
+                             SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                             SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
+                             SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -380,11 +389,11 @@ SQLRETURN SQLGetTablePrivileges(SQLHSTMT statement_handle,
  * SQLGetColumnPrivileges
  * ======================================================================== */
 
-SQLRETURN SQLGetColumnPrivileges(SQLHSTMT statement_handle,
-                                 const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                                 const SQLCHAR *schema_pattern, SQLULEN schema_pattern_length,
-                                 const SQLCHAR *table_pattern, SQLULEN table_pattern_length,
-                                 const SQLCHAR *column_pattern, SQLULEN column_pattern_length)
+SQLRETURN SQLColumnPrivileges(SQLHSTMT statement_handle,
+                              SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                              SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
+                              SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length,
+                              SQLCHAR *column_pattern, SQLSMALLINT column_pattern_length)
 {
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -423,9 +432,9 @@ SQLRETURN SQLGetColumnPrivileges(SQLHSTMT statement_handle,
  * ======================================================================== */
 
 SQLRETURN SQLSpecialColumns(SQLHSTMT statement_handle, SQLUSMALLINT identifier_type,
-                            const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                            const SQLCHAR *schema_name, SQLULEN schema_name_length,
-                            const SQLCHAR *table_name, SQLULEN table_name_length,
+                            SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                            SQLCHAR *schema_name, SQLSMALLINT schema_name_length,
+                            SQLCHAR *table_name, SQLSMALLINT table_name_length,
                             SQLUSMALLINT identifier_scope, SQLUSMALLINT nullable)
 {
     (void)identifier_scope;
@@ -489,13 +498,13 @@ SQLRETURN SQLSpecialColumns(SQLHSTMT statement_handle, SQLUSMALLINT identifier_t
  * ======================================================================== */
 
 SQLRETURN SQLStatistics(SQLHSTMT statement_handle,
-                        const SQLCHAR *catalog_name, SQLULEN catalog_name_length,
-                        const SQLCHAR *schema_name, SQLULEN schema_name_length,
-                        const SQLCHAR *table_name, SQLULEN table_name_length,
-                        SQLUSMALLINT unique, SQLUSMALLINT nullable)
+                        SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
+                        SQLCHAR *schema_name, SQLSMALLINT schema_name_length,
+                        SQLCHAR *table_name, SQLSMALLINT table_name_length,
+                        SQLUSMALLINT unique, SQLUSMALLINT reserved)
 {
     (void)unique;
-    (void)nullable;
+    (void)reserved;
 
     if (!statement_handle) return SQL_INVALID_HANDLE;
 
@@ -539,20 +548,24 @@ SQLRETURN SQLStatistics(SQLHSTMT statement_handle,
  * ======================================================================== */
 
 SQLRETURN SQLDataSources(SQLHENV environment_handle, SQLUSMALLINT direction,
-                         const SQLCHAR *connection_string, SQLSMALLINT connection_string_length,
                          SQLCHAR *server_name, SQLSMALLINT buffer_length,
                          SQLSMALLINT *name_length_ptr,
-                         SQLCHAR *driver_name, SQLSMALLINT driver_name_buffer_length,
-                         SQLSMALLINT *driver_name_length_ptr)
+                         SQLCHAR *description, SQLSMALLINT description_buffer_length,
+                         SQLSMALLINT *description_length_ptr)
 {
-    (void)direction;
-    (void)connection_string;
-    (void)connection_string_length;
-
     if (!environment_handle) return SQL_INVALID_HANDLE;
 
     trino_env_t *env = (trino_env_t *)environment_handle;
     if (!trino_env_valid(env)) return SQL_INVALID_HANDLE;
+
+    /* Enumerating data sources is the driver manager's responsibility; a
+     * driver normally returns SQL_NO_DATA. Only report on the first fetch. */
+    if (direction != SQL_FETCH_FIRST && direction != SQL_FETCH_NEXT) {
+        return SQL_NO_DATA;
+    }
+    if (direction == SQL_FETCH_NEXT) {
+        return SQL_NO_DATA;
+    }
 
     if (server_name && buffer_length > 0) {
         strncpy((char *)server_name, "Trino", (size_t)buffer_length - 1);
@@ -560,10 +573,10 @@ SQLRETURN SQLDataSources(SQLHENV environment_handle, SQLUSMALLINT direction,
         if (name_length_ptr) *name_length_ptr = (SQLSMALLINT)strlen((char *)server_name);
     }
 
-    if (driver_name && driver_name_buffer_length > 0) {
-        strncpy((char *)driver_name, "Trino ODBC Driver", (size_t)driver_name_buffer_length - 1);
-        ((char *)driver_name)[driver_name_buffer_length - 1] = '\0';
-        if (driver_name_length_ptr) *driver_name_length_ptr = (SQLSMALLINT)strlen((char *)driver_name);
+    if (description && description_buffer_length > 0) {
+        strncpy((char *)description, "Trino ODBC Driver", (size_t)description_buffer_length - 1);
+        ((char *)description)[description_buffer_length - 1] = '\0';
+        if (description_length_ptr) *description_length_ptr = (SQLSMALLINT)strlen((char *)description);
     }
 
     return SQL_SUCCESS;

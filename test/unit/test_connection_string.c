@@ -19,6 +19,10 @@ extern void test_json_parse_columns(void);
 extern void test_json_parse_empty_columns(void);
 extern void test_json_parse_no_columns(void);
 extern void test_query_results_free(void);
+extern void test_parse_query_response_rows(void);
+extern void test_parse_query_response_pagination(void);
+extern void test_parse_query_response_error(void);
+extern void test_parse_query_response_complex_cells(void);
 extern void test_trino_to_odbc_types(void);
 extern void test_type_name_lookup(void);
 /* Catalog and write operation tests */
@@ -140,6 +144,10 @@ int main(void)
     test_json_parse_empty_columns();
     test_json_parse_no_columns();
     test_query_results_free();
+    test_parse_query_response_rows();
+    test_parse_query_response_pagination();
+    test_parse_query_response_error();
+    test_parse_query_response_complex_cells();
 
     /* Catalog and write operation tests */
     test_catalog_invalid_handle();

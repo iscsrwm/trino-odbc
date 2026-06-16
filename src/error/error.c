@@ -43,8 +43,8 @@ void trino_diag_add(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
 
     /* Copy message */
     if (message) {
-        strncpy((char *)rec->message_text, (char *)message, SQL_MAX_MESSAGE_LEN - 1);
-        rec->message_text[SQL_MAX_MESSAGE_LEN - 1] = '\0';
+        strncpy((char *)rec->message_text, (char *)message, TRINO_MAX_MESSAGE_LEN - 1);
+        rec->message_text[TRINO_MAX_MESSAGE_LEN - 1] = '\0';
         rec->message_len = (SQLSMALLINT)strlen((char *)rec->message_text);
     } else {
         rec->message_text[0] = '\0';
@@ -96,7 +96,7 @@ void trino_diag_from_trino_error(trino_diagnostics_t *diag,
     SQLINTEGER native_error = 0;
 
     /* Build combined message */
-    char combined[SQL_MAX_MESSAGE_LEN];
+    char combined[TRINO_MAX_MESSAGE_LEN];
     if (error_name && error_message) {
         snprintf(combined, sizeof(combined), "%s: %s", error_name, error_message);
     } else if (error_message) {

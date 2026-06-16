@@ -4,21 +4,18 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Render a bound parameter as a SQL literal suitable for inlining into a query.
+ * Reads `value` according to the bound C type using the correct width, and
+ * quotes/escapes string values. Returns 0 on success, -1 on error (including
+ * insufficient output space). The caller handles SQL NULL separately. */
 static int format_parameter_value(SQLSMALLINT C_type, SQLPOINTER value,
                                    char *out, size_t out_size)
 {
-    if (!value || !out) return -1;
-
-    /* Check for NULL */
-    if (C_type == SQL_C_CHAR && value == NULL) {
-        strncpy(out, "NULL", out_size - 1);
-        out[out_size - 1] = '\0';
-        return 0;
-    }
+    if (!value || !out || out_size < 8) return -1;
 
     switch (C_type) {
-        case SQL_C_CHAR:
-            /* String - escape single quotes */
+        case SQL_C_CHAR: {
+            /* String - wrap in single quotes and double any embedded quote. */
             if (strlen((char *)value) * 2 + 3 >= out_size) return -1;
             size_t pos = 0;
             out[pos++] = '\'';
@@ -33,26 +30,47 @@ static int format_parameter_value(SQLSMALLINT C_type, SQLPOINTER value,
             out[pos++] = '\'';
             out[pos] = '\0';
             break;
+        }
         case SQL_C_STINYINT:
-        case SQL_C_SSHORTINT:
-        case SQL_C_SLONGINT:
-        case SQL_C_INT:
-        case SQL_C_BIGINT:
+        case SQL_C_TINYINT:
+            snprintf(out, out_size, "%d", (int)*(signed char *)value);
+            break;
+        case SQL_C_UTINYINT:
+            snprintf(out, out_size, "%u", (unsigned)*(unsigned char *)value);
+            break;
+        case SQL_C_SSHORT:
+        case SQL_C_SHORT:
+            snprintf(out, out_size, "%d", (int)*(short *)value);
+            break;
+        case SQL_C_USHORT:
+            snprintf(out, out_size, "%u", (unsigned)*(unsigned short *)value);
+            break;
+        case SQL_C_SLONG:
+        case SQL_C_LONG:
+            snprintf(out, out_size, "%ld", (long)*(SQLINTEGER *)value);
+            break;
+        case SQL_C_ULONG:
+            snprintf(out, out_size, "%lu", (unsigned long)*(SQLUINTEGER *)value);
+            break;
+        case SQL_C_SBIGINT:
             snprintf(out, out_size, "%lld", (long long)*(SQLBIGINT *)value);
             break;
+        case SQL_C_UBIGINT:
+            snprintf(out, out_size, "%llu", (unsigned long long)*(SQLUBIGINT *)value);
+            break;
         case SQL_C_FLOAT:
-            snprintf(out, out_size, "%g", *(float *)value);
+            snprintf(out, out_size, "%.9g", (double)*(float *)value);
             break;
         case SQL_C_DOUBLE:
-            snprintf(out, out_size, "%g", *(double *)value);
+            snprintf(out, out_size, "%.17g", *(double *)value);
             break;
         case SQL_C_BIT:
-            strncpy(out, (*(SQLCHAR *)value == 0) ? "false" : "true", out_size - 1);
+            strncpy(out, (*(unsigned char *)value == 0) ? "false" : "true", out_size - 1);
             out[out_size - 1] = '\0';
             break;
         default:
-            snprintf(out, out_size, "%p", value);
-            break;
+            /* Unknown C type: refuse rather than emit a garbage literal. */
+            return -1;
     }
     return 0;
 }
@@ -88,21 +106,22 @@ SQLRETURN trino_stmt_bind_param(trino_stmt_t *stmt, SQLUSMALLINT param_number,
                                 SQLPOINTER parameter_value, SQLLEN *str_len_or_ind)
 {
     (void)parameter_type;
-    (void)C_type;
-    (void)column_size;
-    (void)decimal_digits;
-    (void)str_len_or_ind;
 
     if (!stmt->ipd) {
         stmt->ipd = trino_desc_create();
+        if (!stmt->ipd) return SQL_ERROR;
     }
 
-    if (param_number == 0 || param_number > stmt->ipd->record_count) {
+    if (param_number == 0 || param_number > stmt->ipd->alloc_count) {
         return SQL_ERROR;
     }
 
     trino_desc_record_t *rec = &stmt->ipd->records[param_number - 1];
+    rec->c_type = C_type;
+    rec->column_size = column_size;
+    rec->decimal_digits = decimal_digits;
     rec->data_ptr = parameter_value;
+    rec->str_len_or_ind = str_len_or_ind;
     stmt->param_count = param_number > stmt->param_count ? param_number : stmt->param_count;
 
     return SQL_SUCCESS;
@@ -155,60 +174,138 @@ SQLRETURN SQLNumParams(SQLHSTMT statement_handle, SQLSMALLINT *parameter_count_p
  * Parameter substitution helper - replaces ? with actual values
  * ======================================================================== */
 
+/* Append `len` bytes from `src` to a heap buffer, growing it as needed.
+ * Updates *buf, *cap and *used. Returns 0 on success, -1 on allocation failure. */
+static int append_bytes(char **buf, size_t *cap, size_t *used,
+                        const char *src, size_t len)
+{
+    if (*used + len + 1 > *cap) {
+        size_t newcap = (*cap ? *cap : 256);
+        while (*used + len + 1 > newcap) newcap *= 2;
+        char *grown = realloc(*buf, newcap);
+        if (!grown) return -1;
+        *buf = grown;
+        *cap = newcap;
+    }
+    memcpy(*buf + *used, src, len);
+    *used += len;
+    (*buf)[*used] = '\0';
+    return 0;
+}
+
+/* Replace each '?' placeholder in `sql` (outside of string literals) with the
+ * corresponding bound parameter rendered as a SQL literal. Placeholders are
+ * matched positionally. A parameter bound with str_len_or_ind == SQL_NULL_DATA
+ * or with no data pointer is rendered as NULL. Returns a newly allocated string
+ * (caller frees), or NULL on error. */
 static char *substitute_parameters(trino_stmt_t *stmt, const char *sql,
                                    int param_count)
 {
-    if (!sql || param_count == 0) {
-        return sql ? strdup(sql) : NULL;
+    if (!sql) return NULL;
+    if (param_count == 0 || !stmt->ipd) {
+        return strdup(sql);
     }
 
-    size_t result_size = strlen(sql) + 2048;
-    char *result = malloc(result_size);
+    size_t cap = strlen(sql) + 256;
+    size_t used = 0;
+    char *result = malloc(cap);
     if (!result) return NULL;
+    result[0] = '\0';
 
     const char *src = sql;
-    char *dst = result;
-    int param_num = 1;
+    int param_index = 0;       /* 0-based index of the next placeholder */
+    bool in_string = false;
+    char string_char = '\0';
 
-    while (*src && (size_t)(dst - result) < result_size - 64) {
-        if (*src == '?') {
-            char buffer[512];
-            bool found = false;
-
-            for (int i = 0; i < stmt->ipd->record_count && !found; i++) {
-                trino_desc_record_t *rec = &stmt->ipd->records[i];
-                if (i + 1 == param_num && rec->data_ptr) {
-                    int ret = format_parameter_value(SQL_C_CHAR, rec->data_ptr,
-                                                     buffer, sizeof(buffer));
-                    if (ret == 0) {
-                        size_t len = strlen(buffer);
-                        if ((size_t)(dst - result) + len < result_size - 64) {
-                            memcpy(dst, buffer, len);
-                            dst += len;
-                        }
-                        found = true;
-                    }
-                    param_num++;
+    while (*src) {
+        if (in_string) {
+            if (append_bytes(&result, &cap, &used, src, 1) != 0) goto fail;
+            if (*src == string_char) {
+                if (*(src + 1) == string_char) {
+                    /* Escaped quote: copy the second quote too. */
+                    src++;
+                    if (append_bytes(&result, &cap, &used, src, 1) != 0) goto fail;
+                } else {
+                    in_string = false;
                 }
-            }
-
-            if (!found) {
-                const char *null_str = "NULL";
-                size_t len = strlen(null_str);
-                if ((size_t)(dst - result) + len < result_size - 64) {
-                    memcpy(dst, null_str, len);
-                    dst += len;
-                }
-                param_num++;
             }
             src++;
-        } else {
-            *dst++ = *src++;
+            continue;
         }
+
+        if (*src == '\'' || *src == '"') {
+            in_string = true;
+            string_char = *src;
+            if (append_bytes(&result, &cap, &used, src, 1) != 0) goto fail;
+            src++;
+            continue;
+        }
+
+        if (*src == '?') {
+            char buffer[1024];
+            const char *literal = "NULL";
+            size_t litlen = 4;
+
+            if (param_index < (int)stmt->ipd->alloc_count) {
+                trino_desc_record_t *rec = &stmt->ipd->records[param_index];
+                bool is_null = (rec->str_len_or_ind &&
+                                *rec->str_len_or_ind == SQL_NULL_DATA);
+                if (rec->data_ptr && !is_null &&
+                    format_parameter_value(rec->c_type, rec->data_ptr,
+                                           buffer, sizeof(buffer)) == 0) {
+                    literal = buffer;
+                    litlen = strlen(buffer);
+                }
+            }
+
+            if (append_bytes(&result, &cap, &used, literal, litlen) != 0) goto fail;
+            param_index++;
+            src++;
+            continue;
+        }
+
+        if (append_bytes(&result, &cap, &used, src, 1) != 0) goto fail;
+        src++;
     }
-    *dst = '\0';
 
     return result;
+
+fail:
+    free(result);
+    return NULL;
+}
+
+/* Count '?' placeholders in `sql` that lie outside string literals. */
+static int count_placeholders(const char *sql)
+{
+    if (!sql) return 0;
+    int count = 0;
+    bool in_string = false;
+    char string_char = '\0';
+    for (const char *p = sql; *p; p++) {
+        if (in_string) {
+            if (*p == string_char) {
+                if (*(p + 1) == string_char) p++;
+                else in_string = false;
+            }
+        } else if (*p == '\'' || *p == '"') {
+            in_string = true;
+            string_char = *p;
+        } else if (*p == '?') {
+            count++;
+        }
+    }
+    return count;
+}
+
+/* Produce the final SQL text to send to Trino, substituting any bound
+ * parameters. If there are no placeholders, returns a copy of the input.
+ * Caller frees the returned string. Returns NULL on allocation failure. */
+char *trino_stmt_apply_params(trino_stmt_t *stmt, const SQLCHAR *sql)
+{
+    if (!stmt || !sql) return NULL;
+    int n = count_placeholders((const char *)sql);
+    return substitute_parameters(stmt, (const char *)sql, n);
 }
 
 /* ========================================================================
@@ -223,8 +320,8 @@ SQLRETURN SQLParamData(SQLHSTMT statement_handle, SQLPOINTER *value_ptr_ptr)
     return SQL_NO_DATA;
 }
 
-SQLRETURN SQLPutData(SQLHSTMT statement_handle, const SQLCHAR *data,
-                     SQLULONG length)
+SQLRETURN SQLPutData(SQLHSTMT statement_handle, SQLPOINTER data,
+                     SQLLEN length)
 {
     (void)statement_handle;
     (void)data;

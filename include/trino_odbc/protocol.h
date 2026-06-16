@@ -26,7 +26,7 @@ typedef enum {
 #define TRINO_MAX_TYPE_NAME 128
 
 typedef struct {
-    SQLCHAR   name[SQL_MAX_IDENTIFIER_LEN + 1];
+    SQLCHAR   name[TRINO_MAX_IDENTIFIER_LEN + 1];
     SQLCHAR   type[TRINO_MAX_TYPE_NAME];
     SQLSMALLINT odbc_type;
     SQLULEN   column_size;
@@ -105,6 +105,24 @@ typedef struct {
 trino_http_client_t *trino_http_client_create(void);
 void                 trino_http_client_destroy(trino_http_client_t *client);
 
+/* ------------------------------------------------------------------------
+ * Test transport hook
+ *
+ * When set to a non-NULL function, the client routes requests through this
+ * hook instead of performing real HTTP via libcurl. This exists solely to
+ * enable end-to-end tests of the execute/fetch/getdata path without a live
+ * Trino server. In production the hook is NULL and libcurl is used.
+ *
+ * The hook receives the HTTP method ("POST"/"GET"), the URL, and the request
+ * body (may be NULL), and must return a heap-allocated, NUL-terminated
+ * response body that the caller will free(), or NULL to simulate a transport
+ * failure. `user_ctx` is the value passed to trino_http_set_test_transport.
+ * ------------------------------------------------------------------------ */
+typedef char *(*trino_http_transport_fn)(const char *method, const char *url,
+                                         const char *body, void *user_ctx);
+
+void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx);
+
 /* Configure client from connection */
 SQLRETURN trino_http_client_configure(trino_http_client_t *client,
                                      const char *server, SQLINTEGER port,
@@ -142,6 +160,21 @@ trino_column_meta_t *trino_parse_columns(const char *json, SQLULEN *column_count
 
 /* Parse column metadata from JSON columns array using json-c */
 trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLULEN *column_count);
+
+/* Parse a full Trino QueryResults JSON document into a results structure.
+ *
+ * Populates query id, nextUri, state, error info, stats, columns (only if not
+ * already set on a prior page), and appends any data rows. Safe to call
+ * repeatedly for successive pages: rows accumulate and metadata is updated.
+ *
+ * Returns SQL_SUCCESS on a well-formed (non-error) response, SQL_ERROR if the
+ * response reports a Trino error (error fields are populated), or SQL_ERROR on
+ * a malformed document. `json_text` must be NUL-terminated. */
+SQLRETURN trino_parse_query_response(const char *json_text,
+                                     trino_query_results_t *results);
+
+/* Free only the row data of a results structure (used between pages). */
+void trino_query_results_free_rows(trino_query_results_t *results);
 
 #endif /* TRINO_ODBC_PROTOCOL_H */
 

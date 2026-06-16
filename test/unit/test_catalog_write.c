@@ -247,7 +247,7 @@ TEST(datasources_basic)
     ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
-    ret = SQLDataSources(env, SQL_FETCH_FIRST, NULL, 0,
+    ret = SQLDataSources(env, SQL_FETCH_FIRST,
                          server_name, sizeof(server_name), &server_len,
                          driver_name, sizeof(driver_name), &driver_len);
     ASSERT_EQ(ret, SQL_SUCCESS);
