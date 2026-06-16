@@ -9,9 +9,8 @@
     {
       "name": "windows-x64",
       "displayName": "Windows x64 (MSVC + vcpkg)",
-      "description": "64-bit Windows build using MSVC and vcpkg dependencies",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
+      "description": "64-bit Windows build using MSVC and vcpkg dependencies. Uses the Ninja generator with the compiler from the surrounding 'x64 Native Tools' / Developer shell, so it works with any installed Visual Studio version (2022, 2026, ...).",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-windows",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",

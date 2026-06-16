@@ -16,18 +16,26 @@ the standard VC++ runtime that ships with Windows.
 
 | Tool | Notes |
 |------|-------|
-| Visual Studio 2022 Build Tools | MSVC C toolchain. Free "Build Tools" SKU is sufficient. |
-| CMake | 3.21+ (for presets). |
+| Visual Studio Build Tools (2022 or newer) | MSVC C toolchain + Ninja (included with the "Desktop development with C++" workload). The free "Build Tools" SKU is sufficient. |
+| CMake | 3.21+ (for presets). The one bundled with Visual Studio works. |
 | [vcpkg](https://vcpkg.io) | Provides `curl` and `json-c`. Set `VCPKG_ROOT`. |
 | [WiX Toolset](https://wixtoolset.org) v4/v5 | `dotnet tool install --global wix` |
 
 > The driver itself is plain C and links the system `odbc32.lib` / `odbccp32.lib`
 > (handled automatically by `src/CMakeLists.txt` on Windows). The only external
-> dependencies are libcurl and json-c, declared in the repo-root `vcpkg.json`.
+> dependencies are libcurl and json-c, declared in the repo-root `vcpkg.json`
+> (pinned to a `builtin-baseline` so vcpkg resolves them reproducibly).
+
+> **Use a Developer shell.** The `windows-x64` preset uses the **Ninja**
+> generator and picks up `cl.exe` from the surrounding environment, so it works
+> with any Visual Studio version. You must run the build from an
+> **"x64 Native Tools Command Prompt"** or **"Developer PowerShell"** (Start menu,
+> under Visual Studio) so the MSVC compiler is on `PATH`. A plain PowerShell will
+> fail to find the compiler.
 
 ## One-shot build
 
-From the repository root, in a Developer PowerShell:
+From the repository root, in an **x64 Native Tools / Developer PowerShell**:
 
 ```powershell
 $env:VCPKG_ROOT = "C:\path\to\vcpkg"
@@ -36,11 +44,10 @@ pwsh installer/build_msi.ps1
 
 This produces `trino_odbc-x64.msi` in the repository root. It:
 
-1. Configures with the `windows-x64` CMake preset (uses the vcpkg toolchain and
-   `vcpkg.json` to fetch dependencies).
-2. Builds `trino_odbc.dll` (Release, x64).
-3. Copies the vcpkg runtime DLLs next to the driver.
-4. Runs `wix build` against `trino_odbc.wxs`.
+1. Configures with the `windows-x64` CMake preset (Ninja + the vcpkg toolchain;
+   `vcpkg.json` fetches the dependencies).
+2. Builds `trino_odbc.dll` (Release, x64, with curl/json-c statically linked).
+3. Runs `wix build` against `trino_odbc.wxs`.
 
 ## Manual steps (if you prefer to run them yourself)
 
@@ -49,11 +56,16 @@ This produces `trino_odbc-x64.msi` in the repository root. It:
 cmake --preset windows-x64
 cmake --build --preset windows-x64
 
-# 2. Build the MSI (single self-contained DLL; no dependency DLLs)
+# 2. Build the MSI (single self-contained DLL; no dependency DLLs).
+#    With the Ninja generator the DLL is in build-windows\src.
 wix build installer/trino_odbc.wxs -arch x64 `
-    -d "BinDir=build-windows/src/Release" `
+    -d "BinDir=build-windows/src" `
     -o trino_odbc-x64.msi
 ```
+
+> The one-shot `build_msi.ps1` locates the DLL automatically, so it works
+> whether you build with Ninja (`build-windows\src\`) or a multi-config Visual
+> Studio generator (`build-windows\src\Release\`).
 
 ## How driver registration works
 
@@ -94,6 +106,17 @@ signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `
 signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `
     trino_odbc-x64.msi
 ```
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| `dotnet tool install --global wix` → *No NuGet sources are defined or enabled* | NuGet's default source is missing/disabled. `dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget.org` (or `dotnet nuget enable source nuget.org`), then retry. |
+| `this vcpkg instance requires a manifest with a specified baseline` | `vcpkg.json` must contain `builtin-baseline` (it does). If you changed it, re-add a baseline commit, or run `vcpkg x-update-baseline` in the repo root. |
+| `error MSB8020: build tools for Visual Studio 2022 (Platform Toolset 'v143') cannot be found` | You hit the old VS-pinned generator. The preset now uses **Ninja**, which works with any VS version. Make sure you have the latest `CMakePresets.json` and run from an **x64 Native Tools / Developer** shell. |
+| `cl.exe` / compiler not found at configure time | You're not in a Developer shell. Launch "x64 Native Tools Command Prompt for VS" (or "Developer PowerShell"), then `powershell` if you want PowerShell. |
+| vcpkg can't download (proxy/firewall) | Set `HTTP_PROXY` / `HTTPS_PROXY`, or pre-install: `vcpkg install curl json-c --triplet x64-windows-static-md`. |
+| `trino_odbc.dll not found under build-windows\src` | The compile step failed earlier - scroll up for the MSVC/CMake error. |
 
 ## CI
 

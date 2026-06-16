@@ -40,11 +40,17 @@ cmake --preset windows-x64
 Write-Host "==> Building driver (Release)"
 cmake --build --preset windows-x64
 
-# CMake/Visual Studio places the Release output here.
-$binDir = Join-Path $repoRoot "build-windows\src\Release"
-if (-not (Test-Path (Join-Path $binDir "trino_odbc.dll"))) {
-    throw "trino_odbc.dll not found in $binDir"
+# Locate the built DLL. Single-config generators (Ninja) place it in
+# build-windows\src\; multi-config generators (Visual Studio) use a Release\
+# subfolder. Search both.
+$dll = Get-ChildItem -Path (Join-Path $repoRoot "build-windows\src") `
+    -Filter "trino_odbc.dll" -Recurse -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if (-not $dll) {
+    throw "trino_odbc.dll not found under build-windows\src - the build step likely failed."
 }
+$binDir = $dll.DirectoryName
+Write-Host "==> Found driver DLL at $binDir"
 
 # curl and json-c are statically linked into trino_odbc.dll (the windows-x64
 # preset uses the x64-windows-static-md vcpkg triplet), so there are no runtime
