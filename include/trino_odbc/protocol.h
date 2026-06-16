@@ -106,6 +106,23 @@ trino_http_client_t *trino_http_client_create(void);
 void trino_http_client_destroy(trino_http_client_t *client);
 
 /* ------------------------------------------------------------------------
+ * Connection pool
+ *
+ * A process-wide curl share handle pools the underlying TCP/TLS connections,
+ * DNS cache, and TLS sessions across all driver connections, so repeated
+ * statements/queries reuse sockets instead of reconnecting. Reference-counted:
+ * acquired when an HTTP client is created and released when it is destroyed.
+ * Thread-safe.
+ * ------------------------------------------------------------------------ */
+
+/* Acquire the shared curl handle (initializing the pool on first use).
+ * Returns NULL if the pool could not be created. */
+CURLSH *trino_http_pool_acquire(void);
+
+/* Release a previously acquired reference; tears down the pool at zero. */
+void trino_http_pool_release(void);
+
+/* ------------------------------------------------------------------------
  * Test transport hook
  *
  * When set to a non-NULL function, the client routes requests through this

@@ -81,14 +81,18 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
 
 ## P1 — Correctness & safety (needed before trusting in production)
 
-### P1.1 — Reuse one HTTP client per connection
-- **Problem:** `src/statement/statement.c:209-274` creates/destroys an HTTP client
-  per execute; `connection_pool.c` is a no-op stub. No TCP/TLS reuse.
-- **Fix:** Store a persistent `trino_http_client_t` on the connection and reuse the
-  curl easy/share handle. Don't destroy it after each execute. Decide whether
-  "pooling" is in scope or remove the README claim.
-- **Files:** `src/statement/statement.c`, `src/connection/connection.c`,
-  `src/connection/connection_pool.c`.
+### P1.1 — Reuse one HTTP client per connection — DONE
+- **Problem:** the HTTP client was created/destroyed per execute; the easy/share
+  handle and TCP/TLS connection were never reused; `connection_pool.c` was a
+  no-op stub.
+- **Resolved:** each connection caches and reuses a single `trino_http_client_t`
+  (created lazily, owned by the connection). Additionally, `connection_pool.c`
+  now provides a reference-counted, process-wide curl share handle
+  (`trino_http_pool_acquire`/`release`) that pools TCP/TLS connections, DNS, and
+  TLS sessions across all connections; every easy handle attaches to it via
+  `CURLOPT_SHARE`. Thread-safe via per-data lock callbacks.
+- **Files:** `src/connection/connection.c`, `src/connection/connection_pool.c`,
+  `src/protocol/client.c`.
 
 ### P1.2 — Fix `SQLGetData` type handling — DONE
 - **Problem:** `SQL_C_BINARY` collided with `SQL_C_SHORT` (a symptom of the custom

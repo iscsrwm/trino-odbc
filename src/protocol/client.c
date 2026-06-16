@@ -21,6 +21,13 @@ trino_http_client_t *trino_http_client_create(void)
         return NULL;
     }
 
+    /* Attach to the process-wide connection pool so this handle reuses pooled
+     * TCP/TLS connections and the shared DNS cache. */
+    client->share_handle = trino_http_pool_acquire();
+    if (client->share_handle) {
+        curl_easy_setopt(client->easy_handle, CURLOPT_SHARE, client->share_handle);
+    }
+
     client->connect_timeout = 30;
     client->request_timeout = 300;
     return client;
@@ -32,7 +39,14 @@ void trino_http_client_destroy(trino_http_client_t *client)
         return;
 
     if (client->easy_handle) {
+        /* Detach from the share handle before cleaning up the easy handle, so
+         * the pool is not referenced by a half-destroyed handle. */
+        curl_easy_setopt(client->easy_handle, CURLOPT_SHARE, NULL);
         curl_easy_cleanup(client->easy_handle);
+    }
+    if (client->share_handle) {
+        trino_http_pool_release();
+        client->share_handle = NULL;
     }
 
     free(client->server_url);

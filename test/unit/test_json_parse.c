@@ -257,4 +257,31 @@ TEST(http_header_sanitize)
     ASSERT_EQ(strcmp(out, ""), 0);
 }
 
+/* The connection pool is reference-counted and hands out a single shared curl
+ * handle while at least one reference is held. */
+TEST(http_pool_refcount)
+{
+    CURLSH *a = trino_http_pool_acquire();
+    ASSERT_NOT_NULL(a);
+
+    /* A second acquire returns the same shared handle (not a new one). */
+    CURLSH *b = trino_http_pool_acquire();
+    ASSERT_EQ(a == b, 1);
+
+    /* Releasing once keeps the pool alive (still one reference). */
+    trino_http_pool_release();
+    CURLSH *c = trino_http_pool_acquire();
+    ASSERT_EQ(a == c, 1);
+
+    /* Balance the references taken above. */
+    trino_http_pool_release();
+    trino_http_pool_release();
+    trino_http_pool_release();
+
+    /* After full release, acquiring again succeeds (pool re-created). */
+    CURLSH *d = trino_http_pool_acquire();
+    ASSERT_NOT_NULL(d);
+    trino_http_pool_release();
+}
+
 /* main() is in test_connection_string.c — it calls all test functions */

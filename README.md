@@ -16,15 +16,14 @@ ODBC 3.x driver for the Trino distributed SQL query engine.
   (SPNEGO requires a libcurl built with GSS/SPNEGO support)
 - Streaming result sets with `nextUri` pagination
 - Bound input parameters (`SQLBindParameter`)
-- HTTP client reuse per connection
+- HTTP client reuse per connection, plus a process-wide connection pool
+  (shared TCP/TLS connections, DNS, and TLS sessions across connections)
 - Query cancellation
 - Error handling and diagnostics
 - Thread-safe handle management
 
 ### Known limitations
 
-- No connection *pooling* across connections yet (each connection reuses a
-  single HTTP client).
 - macOS/Windows builds are provided but primarily tested on Linux.
 - See `REMEDIATION_PLAN.md` for the full list of in-progress work.
 
