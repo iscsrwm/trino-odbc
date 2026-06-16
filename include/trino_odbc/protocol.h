@@ -41,36 +41,36 @@ typedef struct {
 #define TRINO_MAX_ROWS_PER_BATCH 10000
 
 typedef struct {
-    /* Query identification */
-    SQLCHAR   query_id[64];
-    SQLCHAR  *next_uri;          /* NULL when done */
+    /* Query identification (C strings). */
+    char      query_id[64];
+    char     *next_uri;          /* NULL when done */
     trino_query_state_t state;
 
     /* Column metadata */
     trino_column_meta_t *columns;
     SQLULEN              column_count;
 
-    /* Data rows — each cell is a null-terminated string */
-    SQLCHAR         ***rows;     /* rows[row][col] */
+    /* Data rows — each cell is a NUL-terminated C string (NULL == SQL NULL). */
+    char            ***rows;     /* rows[row][col] */
     SQLULEN           row_count;
     SQLULEN           row_capacity;
 
     /* Error info (if query failed) */
     bool              has_error;
-    SQLCHAR          *error_name;
-    SQLCHAR          *error_message;
-    SQLCHAR          *error_type;
-    SQLCHAR          *error_uri;
+    char             *error_name;
+    char             *error_message;
+    char             *error_type;
+    char             *error_uri;
     SQLULEN           error_code;
 
     /* Query statistics */
     SQLULEN           rows_processed;
     SQLULEN           bytes_processed;
     SQLDOUBLE         elapsed_time;
-    SQLCHAR          *stats_uri;
+    char             *stats_uri;
 
     /* Memory info */
-    SQLCHAR          *task_info_uri;
+    char             *task_info_uri;
 } trino_query_results_t;
 
 /* ========================================================================
@@ -81,16 +81,16 @@ typedef struct trino_http_client_s {
     CURL          *easy_handle;
     CURLSH       *share_handle;   /* shared handle for connection reuse */
 
-    /* Connection config */
-    SQLCHAR      *server_url;     /* e.g., "http://localhost:8080" */
-    SQLCHAR      *user;
-    SQLCHAR      *password;
-    SQLCHAR      *auth_type;
+    /* Connection config (heap-allocated C strings). */
+    char         *server_url;     /* e.g., "http://localhost:8080" */
+    char         *user;
+    char         *password;
+    char         *auth_type;
     bool          ssl_enabled;
-    SQLCHAR      *ssl_truststore;
-    SQLCHAR      *client_tags_json;
-    SQLCHAR      *session_properties_json;
-    SQLCHAR      *source;
+    char         *ssl_truststore;
+    char         *client_tags_json;
+    char         *session_properties_json;
+    char         *source;
 
     /* Timeouts */
     SQLUINTEGER   connect_timeout;
@@ -148,7 +148,7 @@ SQLRETURN trino_http_client_fetch_next(trino_http_client_t *client,
 
 /* Kill a running query */
 SQLRETURN trino_http_client_kill_query(trino_http_client_t *client,
-                                       const SQLCHAR *query_id);
+                                       const char *query_id);
 
 /* Free query results */
 void trino_query_results_free(trino_query_results_t *results);

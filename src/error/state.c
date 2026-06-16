@@ -4,18 +4,18 @@
 
 /* SQLState lookup helpers */
 
-bool trino_is_success(const SQLCHAR *sqlstate)
+bool trino_is_success(const char *sqlstate)
 {
     return sqlstate[0] == '0' || sqlstate[0] == '1' || sqlstate[0] == '2';
 }
 
-bool trino_is_warning(const SQLCHAR *sqlstate)
+bool trino_is_warning(const char *sqlstate)
 {
     return sqlstate[0] == '0' && sqlstate[1] == '1';
 }
 
 /* Map HTTP status codes to SQLState */
-const SQLCHAR *trino_http_to_sqlstate(int http_status)
+const char *trino_http_to_sqlstate(int http_status)
 {
     switch (http_status) {
         case 200: return TRINO_SQLSTATE_SUCCESS;
@@ -34,7 +34,7 @@ const SQLCHAR *trino_http_to_sqlstate(int http_status)
 
 /* Format error message with context */
 void trino_format_error(SQLCHAR *buffer, SQLINTEGER buffer_length,
-                        const SQLCHAR *sqlstate, const char *context, const char *detail)
+                        const char *sqlstate, const char *context, const char *detail)
 {
     if (!buffer || buffer_length == 0) return;
 

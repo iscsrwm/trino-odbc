@@ -141,7 +141,7 @@ SQLRETURN SQLNumParams(SQLHSTMT statement_handle, SQLSMALLINT *parameter_count_p
     }
 
     int count = 0;
-    const char *p = stmt->sql_text;
+    const char *p = (const char *)stmt->sql_text;
     bool in_string = false;
     char string_char = '\0';
 

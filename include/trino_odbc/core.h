@@ -86,29 +86,30 @@ typedef struct {
     SQLUINTEGER           access_mode;
     SQLUINTEGER           login_timeout;
     SQLUINTEGER           query_timeout;
-    SQLCHAR              *current_catalog;
-    SQLCHAR              *current_schema;
+    /* The string fields below hold heap-allocated C strings (via strdup). */
+    char                 *current_catalog;
+    char                 *current_schema;
 
     /* Server configuration */
-    SQLCHAR              *server;
+    char                 *server;
     SQLINTEGER            port;
-    SQLCHAR              *user;
-    SQLCHAR              *password;
-    SQLCHAR              *catalog;
-    SQLCHAR              *schema;
-    SQLCHAR              *source;
-    SQLCHAR              *client_tags_json;
-    SQLCHAR              *session_properties_json;
+    char                 *user;
+    char                 *password;
+    char                 *catalog;
+    char                 *schema;
+    char                 *source;
+    char                 *client_tags_json;
+    char                 *session_properties_json;
 
     /* Authentication */
-    SQLCHAR              *auth_type;    /* NONE, PASSWORD, CERTIFICATE, KERBEROS */
+    char                 *auth_type;    /* NONE, PASSWORD, CERTIFICATE, KERBEROS */
     bool                  ssl_enabled;
-    SQLCHAR              *ssl_truststore;
+    char                 *ssl_truststore;
 
     /* Transaction state */
     bool                  in_transaction;
     SQLUINTEGER           txn_isolation;   /* SQL_TXN_READ_COMMITTED etc. */
-    SQLCHAR              *txn_savepoint;   /* current savepoint name */
+    char                 *txn_savepoint;   /* current savepoint name */
 
     /* Cursor type */
     SQLUINTEGER           cursor_type;
@@ -169,7 +170,7 @@ typedef struct trino_stmt_s {
     SQLUSMALLINT         *row_status;
 
     /* Trino query state */
-    SQLCHAR              *query_id;
+    char                 *query_id;
     SQLCHAR              *query_state;
     SQLULEN               rows_processed;
     SQLULEN               bytes_processed;

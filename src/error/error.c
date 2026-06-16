@@ -22,8 +22,8 @@ void trino_diag_clear(trino_diagnostics_t *diag)
     memset(diag->records, 0, sizeof(diag->records));
 }
 
-void trino_diag_add(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
-                    SQLINTEGER native_error, const SQLCHAR *message)
+void trino_diag_add(trino_diagnostics_t *diag, const char *sqlstate,
+                    SQLINTEGER native_error, const char *message)
 {
     if (diag->record_count >= MAX_DIAG_RECORDS) {
         return;
@@ -32,7 +32,7 @@ void trino_diag_add(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
     trino_diag_record_t *rec = &diag->records[diag->record_count];
 
     /* Copy sqlstate (always 5 chars) */
-    if (sqlstate && strlen((char *)sqlstate) >= 5) {
+    if (sqlstate && strlen(sqlstate) >= 5) {
         memcpy(rec->sqlstate, sqlstate, 5);
     } else {
         memcpy(rec->sqlstate, TRINO_SQLSTATE_INVALID_SQLSTATE, 5);
@@ -43,7 +43,7 @@ void trino_diag_add(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
 
     /* Copy message */
     if (message) {
-        strncpy((char *)rec->message_text, (char *)message, TRINO_MAX_MESSAGE_LEN - 1);
+        strncpy((char *)rec->message_text, message, TRINO_MAX_MESSAGE_LEN - 1);
         rec->message_text[TRINO_MAX_MESSAGE_LEN - 1] = '\0';
         rec->message_len = (SQLSMALLINT)strlen((char *)rec->message_text);
     } else {
@@ -61,15 +61,15 @@ void trino_diag_add(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
     }
 }
 
-void trino_diag_set_error(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
-                          SQLINTEGER native_error, const SQLCHAR *message)
+void trino_diag_set_error(trino_diagnostics_t *diag, const char *sqlstate,
+                          SQLINTEGER native_error, const char *message)
 {
     trino_diag_clear(diag);
     trino_diag_add(diag, sqlstate, native_error, message);
 }
 
 /* Map Trino error types to SQLState */
-static const SQLCHAR *map_trino_error_type(const char *error_type)
+static const char *map_trino_error_type(const char *error_type)
 {
     if (!error_type) return TRINO_SQLSTATE_QUERY_FAILED;
 
@@ -92,7 +92,7 @@ void trino_diag_from_trino_error(trino_diagnostics_t *diag,
                                  const char *error_message,
                                  const char *error_type)
 {
-    const SQLCHAR *sqlstate = map_trino_error_type(error_type);
+    const char *sqlstate = map_trino_error_type(error_type);
     SQLINTEGER native_error = 0;
 
     /* Build combined message */
@@ -107,5 +107,5 @@ void trino_diag_from_trino_error(trino_diagnostics_t *diag,
         snprintf(combined, sizeof(combined), "Unknown Trino error");
     }
 
-    trino_diag_set_error(diag, sqlstate, native_error, (SQLCHAR *)combined);
+    trino_diag_set_error(diag, sqlstate, native_error, combined);
 }

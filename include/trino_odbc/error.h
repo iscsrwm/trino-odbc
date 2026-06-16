@@ -58,13 +58,14 @@ typedef struct {
 /* Initialize diagnostics context */
 void trino_diag_init(trino_diagnostics_t *diag);
 
-/* Add a diagnostic record */
-void trino_diag_add(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
-                    SQLINTEGER native_error, const SQLCHAR *message);
+/* Add a diagnostic record. sqlstate and message are C strings (the SQLSTATE
+ * literals and message text are plain `char`). */
+void trino_diag_add(trino_diagnostics_t *diag, const char *sqlstate,
+                    SQLINTEGER native_error, const char *message);
 
 /* Set the primary error (first record) */
-void trino_diag_set_error(trino_diagnostics_t *diag, const SQLCHAR *sqlstate,
-                          SQLINTEGER native_error, const SQLCHAR *message);
+void trino_diag_set_error(trino_diagnostics_t *diag, const char *sqlstate,
+                          SQLINTEGER native_error, const char *message);
 
 /* Clear all diagnostics */
 void trino_diag_clear(trino_diagnostics_t *diag);

@@ -320,7 +320,7 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
 
     /* Store query ID */
     free(stmt->query_id);
-    stmt->query_id = strdup((char *)results->query_id);
+    stmt->query_id = strdup(results->query_id);
 
     /* Store query statistics */
     stmt->rows_processed = results->rows_processed;

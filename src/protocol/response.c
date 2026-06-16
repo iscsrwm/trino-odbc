@@ -174,7 +174,7 @@ void trino_query_results_free_rows(trino_query_results_t *results)
  * string. NULL JSON values are represented as a NULL pointer (SQL NULL).
  * Nested arrays/objects are serialized back to their JSON text form so that
  * complex Trino types (array/map/row/json) surface as VARCHAR. */
-static SQLCHAR *cell_to_string(json_object *cell)
+static char *cell_to_string(json_object *cell)
 {
     if (!cell || json_object_is_type(cell, json_type_null)) {
         return NULL; /* SQL NULL */
@@ -194,7 +194,7 @@ static SQLCHAR *cell_to_string(json_object *cell)
     if (!text) return NULL;
 
     size_t len = strlen(text);
-    SQLCHAR *out = malloc(len + 1);
+    char *out = malloc(len + 1);
     if (!out) return NULL;
     memcpy(out, text, len + 1);
     return out;
@@ -216,14 +216,14 @@ static int append_data_rows(trino_query_results_t *results, json_object *data_ar
 
     /* Grow the row pointer array to hold the additional rows. */
     SQLULEN needed = results->row_count + (SQLULEN)new_rows;
-    SQLCHAR ***grown = realloc(results->rows, needed * sizeof(*grown));
+    char ***grown = realloc(results->rows, needed * sizeof(*grown));
     if (!grown) return -1;
     results->rows = grown;
     results->row_capacity = needed;
 
     for (size_t r = 0; r < new_rows; r++) {
         json_object *row_arr = json_object_array_get_idx(data_array, r);
-        SQLCHAR **cells = calloc(cols ? cols : 1, sizeof(*cells));
+        char **cells = calloc(cols ? cols : 1, sizeof(*cells));
         if (!cells) return -1;
 
         if (json_object_is_type(row_arr, json_type_array)) {
@@ -270,7 +270,7 @@ SQLRETURN trino_parse_query_response(const char *json_text,
     results->next_uri = NULL;
     if (json_object_object_get_ex(root, "nextUri", &field) &&
         json_object_is_type(field, json_type_string)) {
-        results->next_uri = (SQLCHAR *)strdup(json_object_get_string(field));
+        results->next_uri = strdup(json_object_get_string(field));
     }
 
     /* Error object */

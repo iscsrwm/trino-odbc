@@ -369,7 +369,7 @@ SQLRETURN trino_http_client_fetch_next(trino_http_client_t *client,
  * ======================================================================== */
 
 SQLRETURN trino_http_client_kill_query(trino_http_client_t *client,
-                                       const SQLCHAR *query_id)
+                                       const char *query_id)
 {
     if (!client || !query_id) return SQL_ERROR;
 
