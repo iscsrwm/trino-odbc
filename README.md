@@ -1,17 +1,32 @@
 # Trino ODBC Driver
 
-Production-quality ODBC 3.x driver for the Trino distributed SQL query engine.
+ODBC 3.x driver for the Trino distributed SQL query engine.
+
+> **Status: under active development.** The core query path (connect, execute,
+> fetch, paginated result sets, bound parameters) works and is covered by unit
+> and end-to-end tests that run clean under AddressSanitizer/UBSan. See
+> `PROJECT_STATUS.md` for a current assessment and `REMEDIATION_PLAN.md` for the
+> roadmap to production readiness.
 
 ## Features
 
-- Full ODBC 3.x compliance (core + extended features)
-- Support for all Trino authentication methods (NONE, PASSWORD, CERTIFICATE, KERBEROS)
-- Connection pooling
+- ODBC 3.x entry points: connect (`SQLConnect`/`SQLDriverConnect`), execute,
+  fetch, `SQLGetData`, catalog functions, diagnostics
+- Authentication: `NONE`, `PASSWORD`, `CERTIFICATE`, and `KERBEROS`/SPNEGO
+  (SPNEGO requires a libcurl built with GSS/SPNEGO support)
+- Streaming result sets with `nextUri` pagination
+- Bound input parameters (`SQLBindParameter`)
+- HTTP client reuse per connection
 - Query cancellation
-- Result set caching for cursor support
-- Comprehensive error handling and diagnostics
+- Error handling and diagnostics
 - Thread-safe handle management
-- Cross-platform (Linux, macOS, Windows)
+
+### Known limitations
+
+- No connection *pooling* across connections yet (each connection reuses a
+  single HTTP client).
+- macOS/Windows builds are provided but primarily tested on Linux.
+- See `REMEDIATION_PLAN.md` for the full list of in-progress work.
 
 ## Building
 

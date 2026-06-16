@@ -1,0 +1,21 @@
+# clang-tidy configuration for the Trino ODBC driver.
+#
+# Focuses on bug-prone patterns and portability. Style/readability and overly
+# pedantic checks are disabled to keep signal high on a C codebase that
+# interoperates with the ODBC C ABI.
+---
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  cert-*,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -cert-err33-c,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -clang-analyzer-valist.Uninitialized
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/trino_odbc.*'
+FormatStyle: file

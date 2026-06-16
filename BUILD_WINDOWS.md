@@ -102,7 +102,7 @@ On Windows, the driver needs to be registered:
 "Trino ODBC Driver"="Installed"
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver]
-"Driver"="C:\Program Files\TrinoODBC\bin\trino_odbc.dll"
+"Driver"="C:\\Program Files\\TrinoODBC\\bin\\trino_odbc.dll"
 "APILevel"=dword:00000001
 "ConnectFunctions"="YYN"
 "DriverODBCVer"="03.51"

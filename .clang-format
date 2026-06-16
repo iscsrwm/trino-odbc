@@ -1,0 +1,20 @@
+# clang-format configuration for the Trino ODBC driver.
+# Approximates the existing code style: 4-space indent, 90-col limit,
+# attached braces, pointers bound to the type.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 90
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+PointerAlignment: Right
+SpaceAfterCStyleCast: false
+AlignAfterOpenBracket: Align
+KeepEmptyLinesAtTheStartOfBlocks: false
+SortIncludes: false
+IndentCaseLabels: true
