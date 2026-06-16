@@ -90,15 +90,19 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
 - **Files:** `src/statement/statement.c`, `src/connection/connection.c`,
   `src/connection/connection_pool.c`.
 
-### P1.2 — Fix `SQLGetData` type handling
-- **Problem:** `src/resultset/resultset.c:309` notes `SQL_C_BINARY` collides with
-  `SQL_C_SHORT` (a symptom of the custom ABI; likely resolves after P0.1). Numeric
-  conversions use unchecked `atoi/atof/atoll`.
-- **Fix:** After P0.1, re-verify all `SQL_C_*` cases are distinct. Add handling for
-  binary, date/time (`SQL_C_TYPE_DATE/TIME/TIMESTAMP`), numeric/decimal, and bit.
-  Use `strtol/strtoll/strtod` with range/error checks; truncation returns
-  `SQL_SUCCESS_WITH_INFO` with state `01004`.
+### P1.2 — Fix `SQLGetData` type handling — DONE
+- **Problem:** `SQL_C_BINARY` collided with `SQL_C_SHORT` (a symptom of the custom
+  ABI) and numeric conversions used unchecked `atoi/atof/atoll`.
+- **Resolved:** The custom ABI collision was eliminated by P0.1. `SQLGetData` now
+  handles char/wchar (UTF-8 bytes), binary, bit, all signed/unsigned integer
+  widths (with range checks via `strtoll`/`strtoull`), float/double (`strtod`),
+  and date/time/timestamp into the ODBC C structs. Invalid/out-of-range values
+  return `SQL_ERROR`; character/binary truncation returns `SQL_SUCCESS_WITH_INFO`
+  and sets SQLSTATE `01004`. Covered by e2e tests.
 - **Files:** `src/resultset/resultset.c`.
+- **Remaining:** full `SQL_C_WCHAR` (UTF-16) conversion and `SQL_C_NUMERIC`
+  struct output are still approximate (wchar treated as UTF-8 bytes; numeric
+  falls back to string).
 
 ### P1.3 — Harden write-op detection
 - **Problem:** `src/statement/statement.c:182` uses case-sensitive `strncmp`;

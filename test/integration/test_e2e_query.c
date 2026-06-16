@@ -358,6 +358,92 @@ TEST(e2e_sqlconnect)
     SQLFreeHandle(SQL_HANDLE_ENV, env);
 }
 
+/* SQLGetData converts date/time/timestamp/bit values into ODBC C structs. */
+TEST(e2e_getdata_datetime)
+{
+    const char *responses[] = {
+        "{\"id\":\"q7\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
+        "{\"id\":\"q7\","
+        "\"columns\":[{\"name\":\"d\",\"type\":\"date\"},"
+        "{\"name\":\"t\",\"type\":\"time\"},"
+        "{\"name\":\"ts\",\"type\":\"timestamp\"},"
+        "{\"name\":\"b\",\"type\":\"boolean\"}],"
+        "\"data\":[[\"2026-06-16\",\"13:45:30\",\"2026-06-16 13:45:30.123456\",true]],"
+        "\"stats\":{\"state\":\"FINISHED\"}}",
+        NULL
+    };
+    mock_script_t script = { responses, 0, "", "" };
+    trino_http_set_test_transport(mock_transport, &script);
+
+    SQLHENV env; SQLHDBC dbc;
+    SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
+    ASSERT_TRUE(stmt != NULL);
+
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT d,t,ts,b FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
+
+    SQLLEN ind = 0;
+    SQL_DATE_STRUCT d; SQL_TIME_STRUCT t; SQL_TIMESTAMP_STRUCT ts; unsigned char b;
+
+    ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_TYPE_DATE, &d, sizeof(d), &ind), SQL_SUCCESS);
+    ASSERT_EQ(d.year, 2026); ASSERT_EQ(d.month, 6); ASSERT_EQ(d.day, 16);
+
+    ASSERT_EQ(SQLGetData(stmt, 2, SQL_C_TYPE_TIME, &t, sizeof(t), &ind), SQL_SUCCESS);
+    ASSERT_EQ(t.hour, 13); ASSERT_EQ(t.minute, 45); ASSERT_EQ(t.second, 30);
+
+    ASSERT_EQ(SQLGetData(stmt, 3, SQL_C_TYPE_TIMESTAMP, &ts, sizeof(ts), &ind), SQL_SUCCESS);
+    ASSERT_EQ(ts.year, 2026); ASSERT_EQ(ts.day, 16); ASSERT_EQ(ts.hour, 13);
+    ASSERT_EQ(ts.second, 30); ASSERT_EQ(ts.fraction, 123456000);
+
+    ASSERT_EQ(SQLGetData(stmt, 4, SQL_C_BIT, &b, sizeof(b), &ind), SQL_SUCCESS);
+    ASSERT_EQ(b, 1);
+
+    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
+}
+
+/* SQLGetData reports truncation (01004 / SQL_SUCCESS_WITH_INFO) for a short
+ * character buffer, and rejects out-of-range integer conversions. */
+TEST(e2e_getdata_truncation_and_range)
+{
+    const char *responses[] = {
+        "{\"id\":\"q8\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
+        "{\"id\":\"q8\","
+        "\"columns\":[{\"name\":\"s\",\"type\":\"varchar\"},"
+        "{\"name\":\"big\",\"type\":\"bigint\"}],"
+        "\"data\":[[\"hello world\",99999]],"
+        "\"stats\":{\"state\":\"FINISHED\"}}",
+        NULL
+    };
+    mock_script_t script = { responses, 0, "", "" };
+    trino_http_set_test_transport(mock_transport, &script);
+
+    SQLHENV env; SQLHDBC dbc;
+    SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
+    ASSERT_TRUE(stmt != NULL);
+
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT s,big FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
+
+    /* Char truncation: buffer too small => SUCCESS_WITH_INFO, full length set. */
+    char small[6]; SQLLEN ind = 0;
+    ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_CHAR, small, sizeof(small), &ind),
+              SQL_SUCCESS_WITH_INFO);
+    ASSERT_STREQ(small, "hello");
+    ASSERT_EQ(ind, 11);
+
+    /* 99999 does not fit in a SQL_C_SSHORT (max 32767) => error. */
+    short sh = 0;
+    ASSERT_EQ(SQLGetData(stmt, 2, SQL_C_SSHORT, &sh, sizeof(sh), &ind), SQL_ERROR);
+
+    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
+}
+
 int main(void)
 {
     printf("Running Trino ODBC Driver end-to-end tests...\n\n");
@@ -370,6 +456,8 @@ int main(void)
     test_e2e_getdata_null();
     test_e2e_query_error();
     test_e2e_write_rowcount();
+    test_e2e_getdata_datetime();
+    test_e2e_getdata_truncation_and_range();
 
     printf("\n========================================\n");
     printf("Tests run:    %d\n", tests_run);

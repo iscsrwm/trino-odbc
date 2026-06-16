@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 
 /* ========================================================================
  * Result set lifecycle
@@ -226,9 +228,86 @@ SQLRETURN SQLGetData(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
 
     trino_resultset_t *rs = (trino_resultset_t *)stmt->resultset;
 
-    return trino_resultset_get_data(rs, column_number, target_type,
-                                    target_value, (SQLBUFFER_LENGTH)buffer_length,
-                                    str_len_or_ind);
+    SQLRETURN ret = trino_resultset_get_data(rs, column_number, target_type,
+                                             target_value,
+                                             (SQLBUFFER_LENGTH)buffer_length,
+                                             str_len_or_ind);
+
+    /* Surface a truncation warning via SQLSTATE 01004 (data truncated). */
+    if (ret == SQL_SUCCESS_WITH_INFO) {
+        trino_diag_set_error(&stmt->diagnostics, "01004", 0,
+                             "String or binary data, right-truncated");
+    }
+    return ret;
+}
+
+/* Copy a NUL-terminated string into a character output buffer, truncating if
+ * necessary. *str_len_or_ind receives the full (untruncated) length. Returns
+ * SQL_SUCCESS, or SQL_SUCCESS_WITH_INFO when truncated. */
+static SQLRETURN copy_string_out(const char *value, SQLPOINTER buffer,
+                                 SQLBUFFER_LENGTH buffer_length,
+                                 SQLLEN *str_len_or_ind)
+{
+    size_t val_len = strlen(value);
+    if (str_len_or_ind) *str_len_or_ind = (SQLLEN)val_len;
+
+    if (!buffer || buffer_length <= 0) {
+        return SQL_SUCCESS_WITH_INFO; /* length returned; no room to copy */
+    }
+    if (val_len >= (size_t)buffer_length) {
+        memcpy(buffer, value, (size_t)buffer_length - 1);
+        ((char *)buffer)[buffer_length - 1] = '\0';
+        return SQL_SUCCESS_WITH_INFO;
+    }
+    memcpy(buffer, value, val_len + 1);
+    return SQL_SUCCESS;
+}
+
+/* Copy raw bytes into a binary output buffer, truncating if necessary. */
+static SQLRETURN copy_binary_out(const char *value, SQLPOINTER buffer,
+                                 SQLBUFFER_LENGTH buffer_length,
+                                 SQLLEN *str_len_or_ind)
+{
+    size_t val_len = strlen(value);
+    if (str_len_or_ind) *str_len_or_ind = (SQLLEN)val_len;
+
+    if (!buffer || buffer_length <= 0) {
+        return SQL_SUCCESS_WITH_INFO;
+    }
+    if (val_len > (size_t)buffer_length) {
+        memcpy(buffer, value, (size_t)buffer_length);
+        return SQL_SUCCESS_WITH_INFO;
+    }
+    memcpy(buffer, value, val_len);
+    return SQL_SUCCESS;
+}
+
+/* Parse a signed integer from a Trino string value. On success stores the
+ * value in *out and returns true. Returns false on a non-numeric value or
+ * out-of-range result. */
+static bool parse_int64(const char *value, long long *out)
+{
+    errno = 0;
+    char *end = NULL;
+    long long v = strtoll(value, &end, 10);
+    if (end == value || errno == ERANGE) return false;
+    /* Trailing whitespace is acceptable; other trailing chars are not. */
+    while (*end && isspace((unsigned char)*end)) end++;
+    if (*end != '\0') return false;
+    *out = v;
+    return true;
+}
+
+static bool parse_double(const char *value, double *out)
+{
+    errno = 0;
+    char *end = NULL;
+    double v = strtod(value, &end);
+    if (end == value) return false;
+    while (*end && isspace((unsigned char)*end)) end++;
+    if (*end != '\0') return false;
+    *out = v;
+    return true;
 }
 
 SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
@@ -258,106 +337,172 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
         value = qr->rows[row][col_idx];
     }
 
-    /* Check for NULL */
-    if (str_len_or_ind) {
-        if (!value) {
+    /* SQL NULL: report via the indicator (which is mandatory for nullable
+     * data). Without an indicator the application cannot represent NULL. */
+    if (!value) {
+        if (str_len_or_ind) {
             *str_len_or_ind = SQL_NULL_DATA;
             return SQL_SUCCESS;
         }
+        return SQL_ERROR; /* 22002: indicator required but not provided */
     }
 
-    if (!buffer || buffer_length == 0) {
-        return SQL_SUCCESS;
-    }
-
-    /* Convert based on C type */
+    /* Convert based on requested C type. */
     switch (C_type) {
-        case SQL_C_CHAR: {
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            size_t val_len = strlen(value);
-            if (val_len >= (size_t)buffer_length) {
-                if (str_len_or_ind) *str_len_or_ind = (SQLLEN)val_len;
-                memcpy(buffer, value, (size_t)buffer_length - 1);
-                ((char *)buffer)[buffer_length - 1] = '\0';
-                return SQL_SUCCESS_WITH_INFO;
-            }
-            memcpy(buffer, value, val_len + 1);
-            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)val_len;
+        case SQL_C_CHAR:
+        case SQL_C_WCHAR: /* treated as UTF-8 bytes; full wide conversion TBD */
+            return copy_string_out(value, buffer, buffer_length, str_len_or_ind);
+
+        case SQL_C_BINARY:
+            return copy_binary_out(value, buffer, buffer_length, str_len_or_ind);
+
+        case SQL_C_BIT: {
+            if (!buffer) return SQL_ERROR;
+            /* Accept 0/1 and true/false. */
+            unsigned char b;
+            if (strcasecmp(value, "true") == 0 || strcmp(value, "1") == 0) b = 1;
+            else b = 0;
+            *(unsigned char *)buffer = b;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(unsigned char);
             return SQL_SUCCESS;
         }
 
+        case SQL_C_STINYINT:
+        case SQL_C_TINYINT: {
+            long long v;
+            if (!buffer || !parse_int64(value, &v) || v < SCHAR_MIN || v > SCHAR_MAX)
+                return SQL_ERROR;
+            *(signed char *)buffer = (signed char)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(signed char);
+            return SQL_SUCCESS;
+        }
+        case SQL_C_UTINYINT: {
+            long long v;
+            if (!buffer || !parse_int64(value, &v) || v < 0 || v > UCHAR_MAX)
+                return SQL_ERROR;
+            *(unsigned char *)buffer = (unsigned char)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(unsigned char);
+            return SQL_SUCCESS;
+        }
+        case SQL_C_SSHORT:
+        case SQL_C_SHORT: {
+            long long v;
+            if (!buffer || !parse_int64(value, &v) || v < SHRT_MIN || v > SHRT_MAX)
+                return SQL_ERROR;
+            *(short *)buffer = (short)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(short);
+            return SQL_SUCCESS;
+        }
+        case SQL_C_USHORT: {
+            long long v;
+            if (!buffer || !parse_int64(value, &v) || v < 0 || v > USHRT_MAX)
+                return SQL_ERROR;
+            *(unsigned short *)buffer = (unsigned short)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(unsigned short);
+            return SQL_SUCCESS;
+        }
+        case SQL_C_SLONG:
         case SQL_C_LONG: {
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            *(SQLINTEGER *)buffer = (SQLINTEGER)atoi(value);
+            long long v;
+            if (!buffer || !parse_int64(value, &v) ||
+                v < INT32_MIN || v > INT32_MAX)
+                return SQL_ERROR;
+            *(SQLINTEGER *)buffer = (SQLINTEGER)v;
             if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLINTEGER);
             return SQL_SUCCESS;
         }
-
+        case SQL_C_ULONG: {
+            long long v;
+            if (!buffer || !parse_int64(value, &v) || v < 0 || v > (long long)UINT32_MAX)
+                return SQL_ERROR;
+            *(SQLUINTEGER *)buffer = (SQLUINTEGER)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLUINTEGER);
+            return SQL_SUCCESS;
+        }
         case SQL_C_SBIGINT: {
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            *(SQLBIGINT *)buffer = (SQLBIGINT)atoll(value);
+            long long v;
+            if (!buffer || !parse_int64(value, &v)) return SQL_ERROR;
+            *(SQLBIGINT *)buffer = (SQLBIGINT)v;
             if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLBIGINT);
             return SQL_SUCCESS;
         }
-
-        case SQL_C_DOUBLE: {
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            *(SQLDOUBLE *)buffer = (SQLDOUBLE)atof(value);
-            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLDOUBLE);
+        case SQL_C_UBIGINT: {
+            errno = 0;
+            char *end = NULL;
+            unsigned long long v = strtoull(value, &end, 10);
+            if (!buffer || end == value || errno == ERANGE) return SQL_ERROR;
+            while (*end && isspace((unsigned char)*end)) end++;
+            if (*end != '\0') return SQL_ERROR;
+            *(SQLUBIGINT *)buffer = (SQLUBIGINT)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLUBIGINT);
             return SQL_SUCCESS;
         }
 
         case SQL_C_FLOAT: {
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            *(SQLFLOAT *)buffer = (SQLFLOAT)atof(value);
-            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLFLOAT);
+            double v;
+            if (!buffer || !parse_double(value, &v)) return SQL_ERROR;
+            *(SQLREAL *)buffer = (SQLREAL)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLREAL);
+            return SQL_SUCCESS;
+        }
+        case SQL_C_DOUBLE: {
+            double v;
+            if (!buffer || !parse_double(value, &v)) return SQL_ERROR;
+            *(SQLDOUBLE *)buffer = (SQLDOUBLE)v;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLDOUBLE);
             return SQL_SUCCESS;
         }
 
-        case SQL_C_SHORT: {
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            *(SQLSHORT *)buffer = (SQLSHORT)atoi(value);
-            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQLSHORT);
+        case SQL_C_TYPE_DATE:
+        case SQL_C_DATE: {
+            /* Expect "YYYY-MM-DD". */
+            if (!buffer) return SQL_ERROR;
+            SQL_DATE_STRUCT d = {0};
+            int y, m, dd;
+            if (sscanf(value, "%d-%d-%d", &y, &m, &dd) != 3) return SQL_ERROR;
+            d.year = (SQLSMALLINT)y; d.month = (SQLUSMALLINT)m; d.day = (SQLUSMALLINT)dd;
+            *(SQL_DATE_STRUCT *)buffer = d;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQL_DATE_STRUCT);
             return SQL_SUCCESS;
         }
-
-        /* Note: SQL_C_BINARY has same value as SQL_C_SHORT (-2),
-         * so it's handled by the default case below as string data */
+        case SQL_C_TYPE_TIME:
+        case SQL_C_TIME: {
+            /* Expect "HH:MM:SS" (fractional seconds, if any, are ignored). */
+            if (!buffer) return SQL_ERROR;
+            SQL_TIME_STRUCT t = {0};
+            int h, mi, s;
+            if (sscanf(value, "%d:%d:%d", &h, &mi, &s) != 3) return SQL_ERROR;
+            t.hour = (SQLUSMALLINT)h; t.minute = (SQLUSMALLINT)mi; t.second = (SQLUSMALLINT)s;
+            *(SQL_TIME_STRUCT *)buffer = t;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQL_TIME_STRUCT);
+            return SQL_SUCCESS;
+        }
+        case SQL_C_TYPE_TIMESTAMP:
+        case SQL_C_TIMESTAMP: {
+            /* Expect "YYYY-MM-DD HH:MM:SS[.ffffff]". */
+            if (!buffer) return SQL_ERROR;
+            SQL_TIMESTAMP_STRUCT ts = {0};
+            int y, mo, d, h, mi, s; long frac = 0;
+            int n = sscanf(value, "%d-%d-%d %d:%d:%d.%ld",
+                           &y, &mo, &d, &h, &mi, &s, &frac);
+            if (n < 6) {
+                /* Allow a 'T' separator (ISO 8601). */
+                n = sscanf(value, "%d-%d-%dT%d:%d:%d.%ld",
+                           &y, &mo, &d, &h, &mi, &s, &frac);
+            }
+            if (n < 6) return SQL_ERROR;
+            ts.year = (SQLSMALLINT)y; ts.month = (SQLUSMALLINT)mo; ts.day = (SQLUSMALLINT)d;
+            ts.hour = (SQLUSMALLINT)h; ts.minute = (SQLUSMALLINT)mi; ts.second = (SQLUSMALLINT)s;
+            /* SQL fraction is in nanoseconds; we captured up to microseconds. */
+            ts.fraction = (n >= 7) ? (SQLUINTEGER)(frac * 1000) : 0;
+            *(SQL_TIMESTAMP_STRUCT *)buffer = ts;
+            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)sizeof(SQL_TIMESTAMP_STRUCT);
+            return SQL_SUCCESS;
+        }
 
         default:
-            /* Default to string conversion */
-            if (!value) {
-                if (str_len_or_ind) *str_len_or_ind = SQL_NULL_DATA;
-                return SQL_SUCCESS;
-            }
-            size_t val_len = strlen(value);
-            if (val_len >= (size_t)buffer_length) {
-                if (str_len_or_ind) *str_len_or_ind = (SQLLEN)val_len;
-                memcpy(buffer, value, (size_t)buffer_length - 1);
-                ((char *)buffer)[buffer_length - 1] = '\0';
-                return SQL_SUCCESS_WITH_INFO;
-            }
-            memcpy(buffer, value, val_len + 1);
-            if (str_len_or_ind) *str_len_or_ind = (SQLLEN)val_len;
-            return SQL_SUCCESS;
+            /* Unknown target type: fall back to a string copy. */
+            return copy_string_out(value, buffer, buffer_length, str_len_or_ind);
     }
 }
 
