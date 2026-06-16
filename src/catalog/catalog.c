@@ -19,7 +19,7 @@ static void build_pattern(const SQLCHAR *pattern, SQLSMALLINT pattern_len, char 
         pattern_len = (SQLSMALLINT)strlen((const char *)pattern);
     }
     if (!pattern || pattern_len <= 0) {
-        strcpy(out, "'%'");
+        snprintf(out, out_size, "'%%'");
     } else {
         size_t i = 0;
         out[i++] = '\'';

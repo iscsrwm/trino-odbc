@@ -2,10 +2,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
+#include <limits.h>
 
 /* ========================================================================
  * Connection string parser
  * ======================================================================== */
+
+/* Parse a non-negative integer from a connection-string value. Returns the
+ * parsed value, or `fallback` if the value is missing/empty/non-numeric or out
+ * of the [0, INT_MAX] range. */
+static long parse_uint_value(const char *value, long fallback)
+{
+    if (!value || !*value)
+        return fallback;
+    errno = 0;
+    char *end = NULL;
+    long v = strtol(value, &end, 10);
+    if (end == value || errno != 0 || v < 0 || v > INT_MAX)
+        return fallback;
+    while (*end && (*end == ' ' || *end == '\t'))
+        end++;
+    if (*end != '\0')
+        return fallback;
+    return v;
+}
 
 void trino_conn_config_defaults(trino_conn_config_t *config)
 {
@@ -56,7 +77,7 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
         if (strcasecmp(key, "Server") == 0 || strcasecmp(key, "Host") == 0) {
             strncpy((char *)config->server, value, sizeof(config->server) - 1);
         } else if (strcasecmp(key, "Port") == 0) {
-            config->port = (SQLINTEGER)atoi(value);
+            config->port = (SQLINTEGER)parse_uint_value(value, config->port);
         } else if (strcasecmp(key, "User") == 0 || strcasecmp(key, "Username") == 0) {
             strncpy((char *)config->user, value, sizeof(config->user) - 1);
         } else if (strcasecmp(key, "Password") == 0) {
@@ -83,9 +104,11 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
             strncpy((char *)config->session_properties, value,
                     sizeof(config->session_properties) - 1);
         } else if (strcasecmp(key, "QueryTimeout") == 0) {
-            config->query_timeout = (SQLUINTEGER)atoi(value);
+            config->query_timeout =
+                (SQLUINTEGER)parse_uint_value(value, config->query_timeout);
         } else if (strcasecmp(key, "ConnectTimeout") == 0) {
-            config->connect_timeout = (SQLUINTEGER)atoi(value);
+            config->connect_timeout =
+                (SQLUINTEGER)parse_uint_value(value, config->connect_timeout);
         }
 
         token = strtok_r(NULL, ";", &saveptr);

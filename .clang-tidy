@@ -12,9 +12,20 @@ Checks: >
   portability-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-narrowing-conversions,
+  -bugprone-branch-clone,
+  -bugprone-multi-level-implicit-pointer-conversion,
   -cert-err33-c,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   -clang-analyzer-valist.Uninitialized
+
+# Rationale for the disabled checks:
+#  - branch-clone: ODBC SQLGetInfo/state mappings intentionally have distinct
+#    cases that resolve to the same value (e.g. commit/rollback behavior); the
+#    duplication documents intent.
+#  - multi-level-implicit-pointer-conversion: flags idiomatic, safe use of the
+#    standard void* allocators (free/realloc/calloc/memmove) with T** arguments.
+#  - cert-err33-c / DeprecatedOrUnsafeBufferHandling / valist.Uninitialized:
+#    too noisy / not applicable to this C + ODBC-ABI codebase.
 
 WarningsAsErrors: ''
 HeaderFilterRegex: 'include/trino_odbc.*'

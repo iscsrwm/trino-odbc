@@ -331,6 +331,33 @@ static bool parse_double(const char *value, double *out)
     return true;
 }
 
+/* Parse up to `max` non-negative integer components from `value`, where each
+ * component is followed by one of the characters in `seps` (and the final one
+ * by NUL or any separator). Writes the parsed components into out[] and the
+ * count into *count. Returns false if fewer than `min` components parse or a
+ * component is non-numeric. Used for date/time string parsing without sscanf. */
+static bool parse_components(const char *value, const char *seps, int min, int max,
+                             long *out, int *count)
+{
+    int n = 0;
+    const char *p = value;
+    while (n < max) {
+        errno = 0;
+        char *end = NULL;
+        long v = strtol(p, &end, 10);
+        if (end == p || errno != 0 || v < 0)
+            break;
+        out[n++] = v;
+        if (*end == '\0')
+            break;
+        if (!strchr(seps, *end))
+            break; /* unexpected separator: stop here */
+        p = end + 1;
+    }
+    *count = n;
+    return n >= min;
+}
+
 SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
                                    SQLSMALLINT C_type, SQLPOINTER buffer,
                                    SQLBUFFER_LENGTH buffer_length, SQLLEN *str_len_or_ind)
@@ -499,13 +526,14 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
             /* Expect "YYYY-MM-DD". */
             if (!buffer)
                 return SQL_ERROR;
-            SQL_DATE_STRUCT d = {0};
-            int y, m, dd;
-            if (sscanf(value, "%d-%d-%d", &y, &m, &dd) != 3)
+            long c[3];
+            int n = 0;
+            if (!parse_components(value, "-", 3, 3, c, &n))
                 return SQL_ERROR;
-            d.year = (SQLSMALLINT)y;
-            d.month = (SQLUSMALLINT)m;
-            d.day = (SQLUSMALLINT)dd;
+            SQL_DATE_STRUCT d = {0};
+            d.year = (SQLSMALLINT)c[0];
+            d.month = (SQLUSMALLINT)c[1];
+            d.day = (SQLUSMALLINT)c[2];
             *(SQL_DATE_STRUCT *)buffer = d;
             if (str_len_or_ind)
                 *str_len_or_ind = (SQLLEN)sizeof(SQL_DATE_STRUCT);
@@ -516,13 +544,14 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
             /* Expect "HH:MM:SS" (fractional seconds, if any, are ignored). */
             if (!buffer)
                 return SQL_ERROR;
-            SQL_TIME_STRUCT t = {0};
-            int h, mi, s;
-            if (sscanf(value, "%d:%d:%d", &h, &mi, &s) != 3)
+            long c[3];
+            int n = 0;
+            if (!parse_components(value, ":", 3, 3, c, &n))
                 return SQL_ERROR;
-            t.hour = (SQLUSMALLINT)h;
-            t.minute = (SQLUSMALLINT)mi;
-            t.second = (SQLUSMALLINT)s;
+            SQL_TIME_STRUCT t = {0};
+            t.hour = (SQLUSMALLINT)c[0];
+            t.minute = (SQLUSMALLINT)c[1];
+            t.second = (SQLUSMALLINT)c[2];
             *(SQL_TIME_STRUCT *)buffer = t;
             if (str_len_or_ind)
                 *str_len_or_ind = (SQLLEN)sizeof(SQL_TIME_STRUCT);
@@ -530,29 +559,25 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
         }
         case SQL_C_TYPE_TIMESTAMP:
         case SQL_C_TIMESTAMP: {
-            /* Expect "YYYY-MM-DD HH:MM:SS[.ffffff]". */
+            /* Expect "YYYY-MM-DD HH:MM:SS[.ffffff]" (space or 'T' separator). */
             if (!buffer)
                 return SQL_ERROR;
-            SQL_TIMESTAMP_STRUCT ts = {0};
-            int y, mo, d, h, mi, s;
-            long frac = 0;
-            int n =
-                sscanf(value, "%d-%d-%d %d:%d:%d.%ld", &y, &mo, &d, &h, &mi, &s, &frac);
-            if (n < 6) {
-                /* Allow a 'T' separator (ISO 8601). */
-                n = sscanf(value, "%d-%d-%dT%d:%d:%d.%ld", &y, &mo, &d, &h, &mi, &s,
-                           &frac);
-            }
-            if (n < 6)
+            /* Components: year, month, day, hour, minute, second, [fraction].
+             * Separators between them are '-', ' '/'T', ':' and '.'. */
+            long c[7] = {0};
+            int n = 0;
+            if (!parse_components(value, "-T :.", 6, 7, c, &n))
                 return SQL_ERROR;
-            ts.year = (SQLSMALLINT)y;
-            ts.month = (SQLUSMALLINT)mo;
-            ts.day = (SQLUSMALLINT)d;
-            ts.hour = (SQLUSMALLINT)h;
-            ts.minute = (SQLUSMALLINT)mi;
-            ts.second = (SQLUSMALLINT)s;
-            /* SQL fraction is in nanoseconds; we captured up to microseconds. */
-            ts.fraction = (n >= 7) ? (SQLUINTEGER)(frac * 1000) : 0;
+            long frac = (n >= 7) ? c[6] : 0;
+            SQL_TIMESTAMP_STRUCT ts = {0};
+            ts.year = (SQLSMALLINT)c[0];
+            ts.month = (SQLUSMALLINT)c[1];
+            ts.day = (SQLUSMALLINT)c[2];
+            ts.hour = (SQLUSMALLINT)c[3];
+            ts.minute = (SQLUSMALLINT)c[4];
+            ts.second = (SQLUSMALLINT)c[5];
+            /* SQL fraction is in nanoseconds; the source value is microseconds. */
+            ts.fraction = (SQLUINTEGER)(frac * 1000);
             *(SQL_TIMESTAMP_STRUCT *)buffer = ts;
             if (str_len_or_ind)
                 *str_len_or_ind = (SQLLEN)sizeof(SQL_TIMESTAMP_STRUCT);

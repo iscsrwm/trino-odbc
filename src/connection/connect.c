@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
+#include <limits.h>
 
 /* Resolve an ODBC string argument that may be NUL-terminated (SQL_NTS) or
  * length-delimited into a freshly allocated NUL-terminated C string. Returns
@@ -65,7 +67,12 @@ SQLRETURN SQLConnect(SQLHDBC connection_handle, SQLCHAR *server_name,
         char *colon = strrchr(server, ':');
         if (colon) {
             *colon = '\0';
-            config.port = (SQLINTEGER)atoi(colon + 1);
+            errno = 0;
+            char *end = NULL;
+            long p = strtol(colon + 1, &end, 10);
+            if (end != colon + 1 && errno == 0 && p > 0 && p <= 65535) {
+                config.port = (SQLINTEGER)p;
+            }
         }
         strncpy((char *)config.server, server, sizeof(config.server) - 1);
         config.server[sizeof(config.server) - 1] = '\0';
