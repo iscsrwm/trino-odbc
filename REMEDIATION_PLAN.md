@@ -140,9 +140,17 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
   error-response case.
 - **Files:** `test/integration/*`, `test/CMakeLists.txt`.
 
-### P2.2 — Optional live integration tests
-- A CTest label (already partly set up as `"integration"`) gated behind an env var
-  pointing at a real Trino, run in CI via a Trino container.
+### P2.2 — Live integration tests — DONE
+- `test/integration/test_live_trino.c` connects via `SQLDriverConnect` and runs
+  real queries against Trino's built-in `tpch`/`system` catalogs (literal SELECT,
+  multi-row fetch, bound parameter, error). It is gated on `TRINO_TEST_SERVER`
+  and skips (passes) when unset, so the default `ctest` run stays green. Labelled
+  `"live"` (`ctest -L live`). A `live-trino` CI job runs it against a
+  `trinodb/trino` service container.
+- **Caught a real bug:** exercising the actual libcurl path (which the in-process
+  mock-transport tests bypass) surfaced a use-after-free — the reused easy handle
+  kept pointing at the POST's freed header list on the subsequent GET. Fixed by
+  always (re)setting `CURLOPT_HTTPHEADER` and detaching it before freeing.
 
 ---
 

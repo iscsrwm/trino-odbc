@@ -210,9 +210,11 @@ static char *perform_request(trino_http_client_t *client, const char *method,
         curl_easy_setopt(client->easy_handle, CURLOPT_POSTFIELDS, body ? body : "");
     }
 
-    if (headers) {
-        curl_easy_setopt(client->easy_handle, CURLOPT_HTTPHEADER, headers);
-    }
+    /* Always set the header list (possibly NULL). The easy handle is reused
+     * across requests, so failing to reset this would leave it pointing at a
+     * previous request's header list, which is freed below — causing a
+     * use-after-free inside libcurl on the next perform. */
+    curl_easy_setopt(client->easy_handle, CURLOPT_HTTPHEADER, headers);
 
     memchunk_t chunk = {0};
     chunk.mem = calloc(1, 1);
@@ -221,6 +223,9 @@ static char *perform_request(trino_http_client_t *client, const char *method,
 
     CURLcode res = curl_easy_perform(client->easy_handle);
 
+    /* Detach the header list from the handle before freeing it, so a later
+     * perform on the reused handle cannot reference freed memory. */
+    curl_easy_setopt(client->easy_handle, CURLOPT_HTTPHEADER, NULL);
     if (headers) curl_slist_free_all(headers);
 
     if (res != CURLE_OK) {

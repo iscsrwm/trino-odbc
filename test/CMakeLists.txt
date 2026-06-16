@@ -33,6 +33,18 @@ target_include_directories(e2e_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME e2e_tests COMMAND e2e_tests)
 set_tests_properties(e2e_tests PROPERTIES LABELS "integration")
 
+# Live tests against a real Trino server. Skipped (pass) unless
+# TRINO_TEST_SERVER is set in the environment. Labelled "live" so they can be
+# run selectively with `ctest -L live`.
+add_executable(live_tests
+    ${CMAKE_SOURCE_DIR}/test/integration/test_live_trino.c
+)
+
+target_link_libraries(live_tests PRIVATE trino_odbc CURL::libcurl Threads::Threads)
+target_include_directories(live_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME live_tests COMMAND live_tests)
+set_tests_properties(live_tests PROPERTIES LABELS "live")
+
 # Installation targets
 install(TARGETS trino_odbc
     LIBRARY DESTINATION lib${LIB_SUFFIX}

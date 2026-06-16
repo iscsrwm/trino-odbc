@@ -41,6 +41,33 @@ sanitizers:
     - cmake --build build-asan -j "$(nproc)"
     - ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build-asan --output-on-failure
 
+# Run the live integration tests against a real Trino server (service container).
+# Uses Trino's built-in tpch catalog, which needs no data setup.
+live-trino:
+  stage: build
+  services:
+    - name: trinodb/trino:latest
+      alias: trino
+  variables:
+    TRINO_TEST_SERVER: trino
+    TRINO_TEST_PORT: "8080"
+    TRINO_TEST_USER: test
+    TRINO_TEST_CATALOG: tpch
+    TRINO_TEST_SCHEMA: tiny
+  script:
+    - cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+    - cmake --build build -j "$(nproc)" --target live_tests
+    # Wait for Trino to finish starting (its /v1/info reports starting=false).
+    - apt-get install -y -qq curl
+    - |
+      for i in $(seq 1 60); do
+        if curl -sf "http://trino:8080/v1/info" | grep -q '"starting":false'; then
+          echo "Trino is ready"; break
+        fi
+        echo "waiting for Trino ($i)..."; sleep 5
+      done
+    - ./build/test/live_tests
+
 # Verify formatting against .clang-format (advisory).
 format-check:
   stage: analyze
