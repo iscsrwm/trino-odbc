@@ -123,6 +123,10 @@ typedef char *(*trino_http_transport_fn)(const char *method, const char *url,
 
 void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx);
 
+/* Sanitize a user-controlled HTTP header value (strip CR/LF, truncate to
+ * out_size-1). Exposed for testing; used internally when building requests. */
+void trino_http_sanitize_header_value(const char *value, char *out, size_t out_size);
+
 /* Configure client from connection */
 SQLRETURN trino_http_client_configure(trino_http_client_t *client,
                                      const char *server, SQLINTEGER port,

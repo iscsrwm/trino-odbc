@@ -23,6 +23,7 @@ extern void test_parse_query_response_rows(void);
 extern void test_parse_query_response_pagination(void);
 extern void test_parse_query_response_error(void);
 extern void test_parse_query_response_complex_cells(void);
+extern void test_http_header_sanitize(void);
 extern void test_trino_to_odbc_types(void);
 extern void test_type_name_lookup(void);
 /* Catalog and write operation tests */
@@ -38,6 +39,10 @@ extern void test_write_op_detection_truncate(void);
 extern void test_write_op_detection_grant(void);
 extern void test_write_op_detection_revoke(void);
 extern void test_write_op_detection_select_not_write(void);
+extern void test_write_op_detection_lowercase(void);
+extern void test_write_op_detection_leading_comments(void);
+extern void test_write_op_detection_cte(void);
+extern void test_write_op_detection_word_boundary(void);
 extern void test_datasources_basic(void);
 extern void test_drivers_basic(void);
 extern void test_rowcount_write_op(void);
@@ -148,6 +153,7 @@ int main(void)
     test_parse_query_response_pagination();
     test_parse_query_response_error();
     test_parse_query_response_complex_cells();
+    test_http_header_sanitize();
 
     /* Catalog and write operation tests */
     test_catalog_invalid_handle();
@@ -162,6 +168,10 @@ int main(void)
     test_write_op_detection_grant();
     test_write_op_detection_revoke();
     test_write_op_detection_select_not_write();
+    test_write_op_detection_lowercase();
+    test_write_op_detection_leading_comments();
+    test_write_op_detection_cte();
+    test_write_op_detection_word_boundary();
     test_datasources_basic();
     test_drivers_basic();
     test_rowcount_write_op();

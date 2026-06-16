@@ -343,20 +343,20 @@ SQLRETURN trino_parse_query_response(const char *json_text,
     return SQL_SUCCESS;
 }
 
-/* Helper to extract base type from parameterized types like decimal(10,2) */
-static const char *get_base_type(const char *trino_type)
+/* Extract the base type from parameterized types like decimal(10,2) into the
+ * caller-provided buffer (NUL-terminated). Thread-safe (no shared state). */
+static const char *get_base_type(const char *trino_type, char *buf, size_t buf_size)
 {
-    static char base_type[128];
     size_t len = strlen(trino_type);
-    if (len >= sizeof(base_type)) len = sizeof(base_type) - 1;
-    memcpy(base_type, trino_type, len);
-    base_type[len] = '\0';
-    
+    if (len >= buf_size) len = buf_size - 1;
+    memcpy(buf, trino_type, len);
+    buf[len] = '\0';
+
     /* Strip parameters like (10,2) from decimal(10,2) */
-    char *paren = strchr(base_type, '(');
+    char *paren = strchr(buf, '(');
     if (paren) *paren = '\0';
-    
-    return base_type;
+
+    return buf;
 }
 
 /* Helper to get ODBC type from Trino type string */
@@ -364,7 +364,8 @@ static int trino_type_to_odbc_type_from_json(const char *trino_type)
 {
     if (!trino_type) return SQL_VARCHAR;
 
-    const char *base = get_base_type(trino_type);
+    char base_buf[128];
+    const char *base = get_base_type(trino_type, base_buf, sizeof(base_buf));
 
     /* Handle complex types by converting to VARCHAR */
     if (strstr(base, "array") || strstr(base, "map") ||

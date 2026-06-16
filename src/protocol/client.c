@@ -139,6 +139,49 @@ static size_t memchunk_callback(void *contents, size_t size, size_t nmemb, void 
 static trino_http_transport_fn g_test_transport = NULL;
 static void                    *g_test_transport_ctx = NULL;
 
+/* Sanitize a user-controlled HTTP header value into `out` (NUL-terminated).
+ * CR and LF characters are dropped to prevent header/request injection, and
+ * the result is truncated to out_size-1 bytes. Safe for out_size >= 1. */
+void trino_http_sanitize_header_value(const char *value, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    size_t pos = 0;
+    if (value) {
+        for (const char *v = value; *v && pos < out_size - 1; v++) {
+            unsigned char c = (unsigned char)*v;
+            if (c == '\r' || c == '\n') continue; /* strip injection chars */
+            out[pos++] = (char)c;
+        }
+    }
+    out[pos] = '\0';
+}
+
+/* Append an HTTP header "<name>: <value>" to the curl header list, sanitizing
+ * the value to prevent header injection (see trino_http_sanitize_header_value).
+ * If the value is NULL/empty, the list is returned unchanged. */
+static struct curl_slist *append_safe_header(struct curl_slist *headers,
+                                             const char *name, const char *value)
+{
+    if (!value || !*value) return headers;
+
+    char buf[2048];
+    size_t pos = 0;
+    for (const char *n = name; *n && pos < sizeof(buf) - 3; n++) {
+        buf[pos++] = *n;
+    }
+    buf[pos++] = ':';
+    buf[pos++] = ' ';
+
+    char sanitized[2000];
+    trino_http_sanitize_header_value(value, sanitized, sizeof(sanitized));
+    for (const char *v = sanitized; *v && pos < sizeof(buf) - 1; v++) {
+        buf[pos++] = *v;
+    }
+    buf[pos] = '\0';
+
+    return curl_slist_append(headers, buf);
+}
+
 void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx)
 {
     g_test_transport = fn;
@@ -221,22 +264,15 @@ trino_query_results_t *trino_http_client_query(trino_http_client_t *client,
         }
     }
 
-    /* Build request headers */
+    /* Build request headers. User-controlled values (source, client tags) are
+     * sanitized to prevent CRLF header injection. */
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Accept: application/json");
     headers = curl_slist_append(headers, "Content-Type: text/plain");
-    if (client->client_tags_json) {
-        char tag_header[2048];
-        snprintf(tag_header, sizeof(tag_header), "X-Trino-Client-Tags: %s",
-                 client->client_tags_json);
-        headers = curl_slist_append(headers, tag_header);
-    }
-    if (client->source) {
-        char source_header[512];
-        snprintf(source_header, sizeof(source_header), "X-Trino-Source: %s",
-                 client->source);
-        headers = curl_slist_append(headers, source_header);
-    }
+    headers = append_safe_header(headers, "X-Trino-Client-Tags",
+                                 (const char *)client->client_tags_json);
+    headers = append_safe_header(headers, "X-Trino-Source",
+                                 (const char *)client->source);
 
     char *response = perform_request(client, "POST", url, (const char *)sql, headers);
     if (!response) {

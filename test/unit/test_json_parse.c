@@ -192,4 +192,32 @@ TEST(parse_query_response_complex_cells)
     trino_query_results_free(r);
 }
 
+/* HTTP header value sanitization strips CR/LF and truncates safely. */
+TEST(http_header_sanitize)
+{
+    char out[64];
+
+    /* Normal value passes through unchanged. */
+    trino_http_sanitize_header_value("trino-odbc", out, sizeof(out));
+    ASSERT_EQ(strcmp(out, "trino-odbc"), 0);
+
+    /* CRLF injection attempt: control chars are stripped, leaving the bytes
+     * concatenated (no second header can be injected). */
+    trino_http_sanitize_header_value("evil\r\nX-Inject: 1", out, sizeof(out));
+    ASSERT_EQ(strcmp(out, "evilX-Inject: 1"), 0);
+
+    /* Bare CR and LF are both removed. */
+    trino_http_sanitize_header_value("a\rb\nc", out, sizeof(out));
+    ASSERT_EQ(strcmp(out, "abc"), 0);
+
+    /* Truncation respects the output buffer size. */
+    char small[5];
+    trino_http_sanitize_header_value("abcdefgh", small, sizeof(small));
+    ASSERT_EQ(strcmp(small, "abcd"), 0);
+
+    /* NULL input yields an empty string. */
+    trino_http_sanitize_header_value(NULL, out, sizeof(out));
+    ASSERT_EQ(strcmp(out, ""), 0);
+}
+
 /* main() is in test_connection_string.c — it calls all test functions */

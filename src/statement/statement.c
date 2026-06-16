@@ -7,6 +7,98 @@
 #include <ctype.h>
 
 /* ========================================================================
+ * SQL classification helpers
+ * ======================================================================== */
+
+/* Advance past whitespace and SQL comments (-- line comments and / * * / block
+ * comments) starting at *p. */
+static const char *skip_ws_and_comments(const char *p)
+{
+    for (;;) {
+        while (*p && isspace((unsigned char)*p)) p++;
+
+        if (p[0] == '-' && p[1] == '-') {
+            p += 2;
+            while (*p && *p != '\n') p++;
+            continue;
+        }
+        if (p[0] == '/' && p[1] == '*') {
+            p += 2;
+            while (*p && !(p[0] == '*' && p[1] == '/')) p++;
+            if (*p) p += 2; /* skip closing */
+            continue;
+        }
+        break;
+    }
+    return p;
+}
+
+/* Compare the keyword starting at p (case-insensitive). Matches only if the
+ * keyword is followed by a non-identifier character (so "INSERTED" does not
+ * match "INSERT"). Returns the length matched, or 0. */
+static size_t match_keyword(const char *p, const char *kw)
+{
+    size_t i = 0;
+    while (kw[i]) {
+        if (toupper((unsigned char)p[i]) != (unsigned char)kw[i]) return 0;
+        i++;
+    }
+    /* Ensure a word boundary follows the keyword. */
+    unsigned char next = (unsigned char)p[i];
+    if (next == '_' || isalnum(next)) return 0;
+    return i;
+}
+
+/* Determine whether a SQL statement is a write/DDL operation (so the driver
+ * reports an update row count rather than a result set). Handles leading
+ * whitespace/comments, case-insensitivity, and WITH ... CTEs (where the leading
+ * keyword does not determine the statement type). */
+bool trino_sql_is_write_op(const SQLCHAR *sql)
+{
+    if (!sql) return false;
+    const char *p = skip_ws_and_comments((const char *)sql);
+
+    /* A leading CTE (WITH ...) precedes the actual statement; skip the CTE
+     * definitions to find the operative keyword. */
+    if (match_keyword(p, "WITH")) {
+        /* Walk to the statement that follows the CTE list. The CTE list is a
+         * comma-separated set of "name AS ( ... )". We scan forward, tracking
+         * parenthesis depth, until we reach a top-level keyword that is not
+         * part of a CTE definition. */
+        p += 4;
+        int depth = 0;
+        while (*p) {
+            if (*p == '(') depth++;
+            else if (*p == ')') { if (depth > 0) depth--; }
+            else if (depth == 0) {
+                const char *q = skip_ws_and_comments(p);
+                if (q != p) { p = q; continue; }
+                if (match_keyword(p, "INSERT") || match_keyword(p, "UPDATE") ||
+                    match_keyword(p, "DELETE") || match_keyword(p, "MERGE")) {
+                    return true;
+                }
+                if (match_keyword(p, "SELECT")) {
+                    return false;
+                }
+            }
+            p++;
+        }
+        return false;
+    }
+
+    static const char *write_keywords[] = {
+        "INSERT", "UPDATE", "DELETE", "MERGE",
+        "CREATE", "DROP", "ALTER", "TRUNCATE",
+        "GRANT", "REVOKE", "COMMENT", "CALL",
+        "REFRESH", "ANALYZE", NULL
+    };
+    for (int i = 0; write_keywords[i]; i++) {
+        if (match_keyword(p, write_keywords[i])) return true;
+    }
+    return false;
+}
+
+/* ========================================================================
  * Statement lifecycle
  * ======================================================================== */
 
@@ -176,22 +268,9 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
         stmt->resultset = NULL;
     }
 
-    /* Detect write operations (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, TRUNCATE) */
-    bool is_write_op = false;
-    const char *sql_upper = (const char *)sql;
-    /* Skip leading whitespace */
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-    if (strncmp(sql_upper, "INSERT", 6) == 0 ||
-        strncmp(sql_upper, "UPDATE", 6) == 0 ||
-        strncmp(sql_upper, "DELETE", 6) == 0 ||
-        strncmp(sql_upper, "CREATE", 6) == 0 ||
-        strncmp(sql_upper, "DROP", 4) == 0 ||
-        strncmp(sql_upper, "ALTER", 5) == 0 ||
-        strncmp(sql_upper, "TRUNCATE", 8) == 0 ||
-        strncmp(sql_upper, "GRANT", 5) == 0 ||
-        strncmp(sql_upper, "REVOKE", 6) == 0) {
-        is_write_op = true;
-    }
+    /* Detect write/DDL operations so we report an update count, not a result
+     * set. Handles case, leading comments, and CTEs. */
+    bool is_write_op = trino_sql_is_write_op(sql);
 
     /* Get HTTP client */
     trino_http_client_t *client = trino_conn_get_http_client(stmt->conn);

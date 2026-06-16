@@ -6,6 +6,7 @@
 #include "trino_odbc/core.h"
 #include "trino_odbc/error.h"
 #include "trino_odbc/catalog.h"
+#include "trino_odbc/statement.h"
 
 /* Shared test counters — extern from test_handle.c */
 extern int tests_run;
@@ -85,152 +86,99 @@ TEST(catalog_no_connection)
 }
 
 /* ========================================================================
- * Test: Write operation detection - INSERT
+ * Write operation detection (exercises the real trino_sql_is_write_op)
  * ======================================================================== */
 TEST(write_op_detection_insert)
 {
-    /* Test that INSERT is detected as write operation */
-    const char *sql = "INSERT INTO users (name, email) VALUES ('test', 'test@example.com')";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "INSERT", 6) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "INSERT INTO users (name) VALUES ('t')"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - UPDATE
- * ======================================================================== */
 TEST(write_op_detection_update)
 {
-    const char *sql = "UPDATE users SET name = 'test' WHERE id = 1";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "UPDATE", 6) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "UPDATE users SET name = 't' WHERE id = 1"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - DELETE
- * ======================================================================== */
 TEST(write_op_detection_delete)
 {
-    const char *sql = "DELETE FROM users WHERE id = 1";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "DELETE", 6) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "DELETE FROM users WHERE id = 1"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - CREATE TABLE
- * ======================================================================== */
 TEST(write_op_detection_create)
 {
-    const char *sql = "CREATE TABLE test (id INTEGER, name VARCHAR)";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "CREATE", 6) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "CREATE TABLE test (id INTEGER, name VARCHAR)"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - DROP TABLE
- * ======================================================================== */
 TEST(write_op_detection_drop)
 {
-    const char *sql = "DROP TABLE test";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "DROP", 4) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"DROP TABLE test"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - ALTER TABLE
- * ======================================================================== */
 TEST(write_op_detection_alter)
 {
-    const char *sql = "ALTER TABLE test ADD COLUMN new_col VARCHAR";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "ALTER", 5) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "ALTER TABLE test ADD COLUMN c VARCHAR"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - TRUNCATE
- * ======================================================================== */
 TEST(write_op_detection_truncate)
 {
-    const char *sql = "TRUNCATE TABLE test";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "TRUNCATE", 8) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"TRUNCATE TABLE test"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - GRANT
- * ======================================================================== */
 TEST(write_op_detection_grant)
 {
-    const char *sql = "GRANT SELECT ON test TO user";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "GRANT", 5) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "GRANT SELECT ON test TO usr"));
 }
 
-/* ========================================================================
- * Test: Write operation detection - REVOKE
- * ======================================================================== */
 TEST(write_op_detection_revoke)
 {
-    const char *sql = "REVOKE SELECT ON test FROM user";
-    const char *sql_upper = sql;
-
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
-
-    bool is_write = (strncmp(sql_upper, "REVOKE", 6) == 0);
-    ASSERT_TRUE(is_write);
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "REVOKE SELECT ON test FROM usr"));
 }
 
-/* ========================================================================
- * Test: SELECT is NOT a write operation
- * ======================================================================== */
 TEST(write_op_detection_select_not_write)
 {
-    const char *sql = "SELECT * FROM users";
-    const char *sql_upper = sql;
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"SELECT * FROM users"));
+}
 
-    while (*sql_upper && isspace((unsigned char)*sql_upper)) sql_upper++;
+/* Lowercase keywords must still be detected. */
+TEST(write_op_detection_lowercase)
+{
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "insert into t values (1)"));
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"select 1"));
+}
 
-    bool is_write = (strncmp(sql_upper, "INSERT", 6) == 0 ||
-                     strncmp(sql_upper, "UPDATE", 6) == 0 ||
-                     strncmp(sql_upper, "DELETE", 6) == 0 ||
-                     strncmp(sql_upper, "CREATE", 6) == 0 ||
-                     strncmp(sql_upper, "DROP", 4) == 0 ||
-                     strncmp(sql_upper, "ALTER", 5) == 0 ||
-                     strncmp(sql_upper, "TRUNCATE", 8) == 0 ||
-                     strncmp(sql_upper, "GRANT", 5) == 0 ||
-                     strncmp(sql_upper, "REVOKE", 6) == 0);
-    ASSERT_FALSE(is_write);
+/* Leading whitespace and comments must be skipped before classifying. */
+TEST(write_op_detection_leading_comments)
+{
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "  -- audit insert\n  INSERT INTO t VALUES (1)"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "/* block */ UPDATE t SET x = 1"));
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)
+        "/* not a write */ SELECT 1"));
+}
+
+/* A CTE preceding the operative statement determines the classification. */
+TEST(write_op_detection_cte)
+{
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)
+        "WITH a AS (SELECT 1) SELECT * FROM a"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
+        "WITH a AS (SELECT 1) INSERT INTO t SELECT * FROM a"));
+}
+
+/* Identifiers that merely start with a keyword must not match. */
+TEST(write_op_detection_word_boundary)
+{
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)
+        "SELECT * FROM inserted_rows"));
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"SELECT updates FROM t"));
 }
 
 /* ========================================================================
