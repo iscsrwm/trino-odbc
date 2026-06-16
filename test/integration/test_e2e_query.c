@@ -494,6 +494,83 @@ TEST(e2e_getdata_truncation_and_range)
     trino_http_set_test_transport(NULL, NULL);
 }
 
+/* SQLGetData converts a UTF-8 value to UTF-16 for SQL_C_WCHAR, including a
+ * non-ASCII character, and reports the byte length / handles truncation. */
+TEST(e2e_getdata_wchar)
+{
+    const char *responses[] = {
+        "{\"id\":\"q9\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
+        /* "café" - the 'é' (U+00E9) is two UTF-8 bytes, one UTF-16 unit. */
+        "{\"id\":\"q9\","
+        "\"columns\":[{\"name\":\"s\",\"type\":\"varchar\"}],"
+        "\"data\":[[\"caf\\u00e9\"]],"
+        "\"stats\":{\"state\":\"FINISHED\"}}",
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
+    trino_http_set_test_transport(mock_transport, &script);
+
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
+    ASSERT_TRUE(stmt != NULL);
+
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT s FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
+
+    SQLWCHAR wbuf[16];
+    SQLLEN ind = 0;
+    ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_WCHAR, wbuf, sizeof(wbuf), &ind), SQL_SUCCESS);
+    /* "café" is 4 UTF-16 code units => 8 bytes reported. */
+    ASSERT_EQ(ind, (SQLLEN)(4 * sizeof(SQLWCHAR)));
+    ASSERT_EQ(wbuf[0], (SQLWCHAR)'c');
+    ASSERT_EQ(wbuf[1], (SQLWCHAR)'a');
+    ASSERT_EQ(wbuf[2], (SQLWCHAR)'f');
+    ASSERT_EQ(wbuf[3], (SQLWCHAR)0x00e9); /* é */
+    ASSERT_EQ(wbuf[4], (SQLWCHAR)0);      /* NUL terminated */
+
+    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
+}
+
+/* SQL_C_WCHAR truncates on a wide-char boundary and reports the full length. */
+TEST(e2e_getdata_wchar_truncation)
+{
+    const char *responses[] = {
+        "{\"id\":\"q10\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
+        "{\"id\":\"q10\","
+        "\"columns\":[{\"name\":\"s\",\"type\":\"varchar\"}],"
+        "\"data\":[[\"hello\"]],"
+        "\"stats\":{\"state\":\"FINISHED\"}}",
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
+    trino_http_set_test_transport(mock_transport, &script);
+
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
+    ASSERT_TRUE(stmt != NULL);
+
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT s FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
+
+    /* Buffer holds only 3 wide chars => 2 chars + NUL, truncated. */
+    SQLWCHAR wbuf[3];
+    SQLLEN ind = 0;
+    ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_WCHAR, wbuf, sizeof(wbuf), &ind),
+              SQL_SUCCESS_WITH_INFO);
+    ASSERT_EQ(ind, (SQLLEN)(5 * sizeof(SQLWCHAR))); /* full length reported */
+    ASSERT_EQ(wbuf[0], (SQLWCHAR)'h');
+    ASSERT_EQ(wbuf[1], (SQLWCHAR)'e');
+    ASSERT_EQ(wbuf[2], (SQLWCHAR)0); /* NUL terminated */
+
+    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
+}
+
 int main(void)
 {
     printf("Running Trino ODBC Driver end-to-end tests...\n\n");
@@ -508,6 +585,8 @@ int main(void)
     test_e2e_write_rowcount();
     test_e2e_getdata_datetime();
     test_e2e_getdata_truncation_and_range();
+    test_e2e_getdata_wchar();
+    test_e2e_getdata_wchar_truncation();
 
     printf("\n========================================\n");
     printf("Tests run:    %d\n", tests_run);

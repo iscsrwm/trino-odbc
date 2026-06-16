@@ -278,6 +278,51 @@ static SQLRETURN copy_string_out(const char *value, SQLPOINTER buffer,
     return SQL_SUCCESS;
 }
 
+/* Convert a UTF-8 cell value to UTF-16 and copy into a wide-character output
+ * buffer. Per ODBC, buffer_length and *str_len_or_ind for SQL_C_WCHAR are in
+ * bytes. The full (untruncated) length in bytes is reported; truncation occurs
+ * on a wide-character boundary and the buffer is always NUL-terminated.
+ * Returns SQL_SUCCESS, SQL_SUCCESS_WITH_INFO on truncation, or SQL_ERROR. */
+static SQLRETURN copy_wstring_out(const char *value, SQLPOINTER buffer,
+                                  SQLBUFFER_LENGTH buffer_length, SQLLEN *str_len_or_ind)
+{
+    size_t wlen = 0;
+    SQLWCHAR *wstr = trino_utf8_to_wchars(value, &wlen);
+    if (!wstr)
+        return SQL_ERROR;
+
+    /* Full length, in bytes, excluding the NUL terminator. */
+    if (str_len_or_ind)
+        *str_len_or_ind = (SQLLEN)(wlen * sizeof(SQLWCHAR));
+
+    if (!buffer || buffer_length <= 0) {
+        free(wstr);
+        return SQL_SUCCESS_WITH_INFO;
+    }
+
+    /* Number of whole wide chars that fit, reserving one for the terminator. */
+    size_t max_wchars = (size_t)buffer_length / sizeof(SQLWCHAR);
+    SQLWCHAR *out = (SQLWCHAR *)buffer;
+    SQLRETURN ret = SQL_SUCCESS;
+
+    if (max_wchars == 0) {
+        /* Not even room for a terminator. */
+        free(wstr);
+        return SQL_SUCCESS_WITH_INFO;
+    }
+
+    size_t copy = wlen;
+    if (copy > max_wchars - 1) {
+        copy = max_wchars - 1;
+        ret = SQL_SUCCESS_WITH_INFO;
+    }
+    memcpy(out, wstr, copy * sizeof(SQLWCHAR));
+    out[copy] = 0;
+
+    free(wstr);
+    return ret;
+}
+
 /* Copy raw bytes into a binary output buffer, truncating if necessary. */
 static SQLRETURN copy_binary_out(const char *value, SQLPOINTER buffer,
                                  SQLBUFFER_LENGTH buffer_length, SQLLEN *str_len_or_ind)
@@ -399,8 +444,10 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
     /* Convert based on requested C type. */
     switch (C_type) {
         case SQL_C_CHAR:
-        case SQL_C_WCHAR: /* treated as UTF-8 bytes; full wide conversion TBD */
             return copy_string_out(value, buffer, buffer_length, str_len_or_ind);
+
+        case SQL_C_WCHAR:
+            return copy_wstring_out(value, buffer, buffer_length, str_len_or_ind);
 
         case SQL_C_BINARY:
             return copy_binary_out(value, buffer, buffer_length, str_len_or_ind);
