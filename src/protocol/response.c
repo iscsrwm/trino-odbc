@@ -8,7 +8,8 @@
 static int trino_type_to_odbc_type_from_json(const char *trino_type);
 
 /* Parse column metadata from a JSON columns array using json-c */
-trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLULEN *column_count)
+trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array,
+                                               SQLULEN *column_count)
 {
     if (!columns_array || !column_count) {
         return NULL;
@@ -33,7 +34,7 @@ trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLUL
 
     for (size_t i = 0; i < array_len; i++) {
         json_object *col_obj = json_object_array_get_idx(columns_array, i);
-        
+
         /* Initialize defaults even if parsing fails */
         columns[i].odbc_type = SQL_VARCHAR;
         columns[i].nullable = 1;
@@ -46,7 +47,7 @@ trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLUL
 
         /* Extract name */
         json_object *name_obj = NULL;
-        if (json_object_object_get_ex(col_obj, "name", &name_obj) && 
+        if (json_object_object_get_ex(col_obj, "name", &name_obj) &&
             json_object_is_type(name_obj, json_type_string)) {
             const char *name_str = json_object_get_string(name_obj);
             strncpy((char *)columns[i].name, name_str, TRINO_MAX_IDENTIFIER_LEN);
@@ -55,7 +56,7 @@ trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLUL
 
         /* Extract type */
         json_object *type_obj = NULL;
-        if (json_object_object_get_ex(col_obj, "type", &type_obj) && 
+        if (json_object_object_get_ex(col_obj, "type", &type_obj) &&
             json_object_is_type(type_obj, json_type_string)) {
             const char *type_str = json_object_get_string(type_obj);
             strncpy((char *)columns[i].type, type_str, TRINO_MAX_TYPE_NAME - 1);
@@ -75,7 +76,8 @@ trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLUL
     return columns;
 }
 
-/* Wrapper for backward compatibility - parses full QueryResults JSON and extracts columns */
+/* Wrapper for backward compatibility - parses full QueryResults JSON and extracts columns
+ */
 trino_column_meta_t *trino_parse_columns(const char *json, SQLULEN *column_count)
 {
     if (!json || !column_count) {
@@ -86,9 +88,9 @@ trino_column_meta_t *trino_parse_columns(const char *json, SQLULEN *column_count
     trino_column_meta_t *columns = NULL;
 
     root = json_tokener_parse(json);
-    
+
 #ifdef DEBUG
-    fprintf(stderr, "DEBUG: trino_parse_columns parsed JSON, root=%p\n", (void*)root);
+    fprintf(stderr, "DEBUG: trino_parse_columns parsed JSON, root=%p\n", (void *)root);
 #endif
 
     if (!root || !json_object_is_type(root, json_type_object)) {
@@ -103,9 +105,10 @@ trino_column_meta_t *trino_parse_columns(const char *json, SQLULEN *column_count
     }
 
     columns = trino_parse_columns_jsonc(columns_obj, column_count);
-    
+
 #ifdef DEBUG
-    fprintf(stderr, "DEBUG: trino_parse_columns returned %p with count=%lu\n", (void*)columns, *column_count);
+    fprintf(stderr, "DEBUG: trino_parse_columns returned %p with count=%lu\n",
+            (void *)columns, *column_count);
 #endif
 
 cleanup:
@@ -118,7 +121,8 @@ cleanup:
 /* Free query results */
 void trino_query_results_free(trino_query_results_t *results)
 {
-    if (!results) return;
+    if (!results)
+        return;
 
     /* Free strings */
     free(results->next_uri);
@@ -154,7 +158,8 @@ void trino_query_results_free(trino_query_results_t *results)
  * metadata are left intact (used between pages of a streamed result set). */
 void trino_query_results_free_rows(trino_query_results_t *results)
 {
-    if (!results || !results->rows) return;
+    if (!results || !results->rows)
+        return;
 
     for (SQLULEN i = 0; i < results->row_count; i++) {
         if (results->rows[i]) {
@@ -191,11 +196,13 @@ static char *cell_to_string(json_object *cell)
         text = json_object_get_string(cell);
     }
 
-    if (!text) return NULL;
+    if (!text)
+        return NULL;
 
     size_t len = strlen(text);
     char *out = malloc(len + 1);
-    if (!out) return NULL;
+    if (!out)
+        return NULL;
     memcpy(out, text, len + 1);
     return out;
 }
@@ -210,21 +217,24 @@ static int append_data_rows(trino_query_results_t *results, json_object *data_ar
     }
 
     size_t new_rows = json_object_array_length(data_array);
-    if (new_rows == 0) return 0;
+    if (new_rows == 0)
+        return 0;
 
     SQLULEN cols = results->column_count;
 
     /* Grow the row pointer array to hold the additional rows. */
     SQLULEN needed = results->row_count + (SQLULEN)new_rows;
     char ***grown = realloc(results->rows, needed * sizeof(*grown));
-    if (!grown) return -1;
+    if (!grown)
+        return -1;
     results->rows = grown;
     results->row_capacity = needed;
 
     for (size_t r = 0; r < new_rows; r++) {
         json_object *row_arr = json_object_array_get_idx(data_array, r);
         char **cells = calloc(cols ? cols : 1, sizeof(*cells));
-        if (!cells) return -1;
+        if (!cells)
+            return -1;
 
         if (json_object_is_type(row_arr, json_type_array)) {
             size_t avail = json_object_array_length(row_arr);
@@ -247,11 +257,13 @@ static int append_data_rows(trino_query_results_t *results, json_object *data_ar
 SQLRETURN trino_parse_query_response(const char *json_text,
                                      trino_query_results_t *results)
 {
-    if (!json_text || !results) return SQL_ERROR;
+    if (!json_text || !results)
+        return SQL_ERROR;
 
     json_object *root = json_tokener_parse(json_text);
     if (!root || !json_object_is_type(root, json_type_object)) {
-        if (root) json_object_put(root);
+        if (root)
+            json_object_put(root);
         return SQL_ERROR;
     }
 
@@ -324,8 +336,7 @@ SQLRETURN trino_parse_query_response(const char *json_text,
     }
 
     /* Columns: only parse once (the first page that carries them). */
-    if (!results->columns &&
-        json_object_object_get_ex(root, "columns", &field)) {
+    if (!results->columns && json_object_object_get_ex(root, "columns", &field)) {
         SQLULEN count = 0;
         results->columns = trino_parse_columns_jsonc(field, &count);
         results->column_count = count;
@@ -348,13 +359,15 @@ SQLRETURN trino_parse_query_response(const char *json_text,
 static const char *get_base_type(const char *trino_type, char *buf, size_t buf_size)
 {
     size_t len = strlen(trino_type);
-    if (len >= buf_size) len = buf_size - 1;
+    if (len >= buf_size)
+        len = buf_size - 1;
     memcpy(buf, trino_type, len);
     buf[len] = '\0';
 
     /* Strip parameters like (10,2) from decimal(10,2) */
     char *paren = strchr(buf, '(');
-    if (paren) *paren = '\0';
+    if (paren)
+        *paren = '\0';
 
     return buf;
 }
@@ -362,25 +375,33 @@ static const char *get_base_type(const char *trino_type, char *buf, size_t buf_s
 /* Helper to get ODBC type from Trino type string */
 static int trino_type_to_odbc_type_from_json(const char *trino_type)
 {
-    if (!trino_type) return SQL_VARCHAR;
+    if (!trino_type)
+        return SQL_VARCHAR;
 
     char base_buf[128];
     const char *base = get_base_type(trino_type, base_buf, sizeof(base_buf));
 
     /* Handle complex types by converting to VARCHAR */
-    if (strstr(base, "array") || strstr(base, "map") ||
-        strstr(base, "row") || strstr(base, "json")) {
+    if (strstr(base, "array") || strstr(base, "map") || strstr(base, "row") ||
+        strstr(base, "json")) {
         return SQL_VARCHAR;
     }
 
     /* Numeric types */
-    if (strcmp(base, "tinyint") == 0) return SQL_TINYINT;
-    if (strcmp(base, "smallint") == 0) return SQL_SMALLINT;
-    if (strcmp(base, "integer") == 0 || strcmp(base, "int") == 0) return SQL_INTEGER;
-    if (strcmp(base, "bigint") == 0) return SQL_BIGINT;
-    if (strcmp(base, "real") == 0) return SQL_REAL;
-    if (strcmp(base, "double") == 0 || strcmp(base, "double precision") == 0) return SQL_DOUBLE;
-    if (strcmp(base, "decimal") == 0 || strcmp(base, "numeric") == 0) return SQL_DECIMAL;
+    if (strcmp(base, "tinyint") == 0)
+        return SQL_TINYINT;
+    if (strcmp(base, "smallint") == 0)
+        return SQL_SMALLINT;
+    if (strcmp(base, "integer") == 0 || strcmp(base, "int") == 0)
+        return SQL_INTEGER;
+    if (strcmp(base, "bigint") == 0)
+        return SQL_BIGINT;
+    if (strcmp(base, "real") == 0)
+        return SQL_REAL;
+    if (strcmp(base, "double") == 0 || strcmp(base, "double precision") == 0)
+        return SQL_DOUBLE;
+    if (strcmp(base, "decimal") == 0 || strcmp(base, "numeric") == 0)
+        return SQL_DECIMAL;
 
     /* String types */
     if (strcmp(base, "varchar") == 0) {
@@ -394,15 +415,20 @@ static int trino_type_to_odbc_type_from_json(const char *trino_type)
     }
 
     /* Boolean */
-    if (strcmp(base, "boolean") == 0) return SQL_BIT;
+    if (strcmp(base, "boolean") == 0)
+        return SQL_BIT;
 
     /* Date/time types */
-    if (strcmp(base, "date") == 0) return SQL_TYPE_DATE;
-    if (strcmp(base, "time") == 0) return SQL_TYPE_TIME;
-    if (strcmp(base, "timestamp") == 0) return SQL_TYPE_TIMESTAMP;
+    if (strcmp(base, "date") == 0)
+        return SQL_TYPE_DATE;
+    if (strcmp(base, "time") == 0)
+        return SQL_TYPE_TIME;
+    if (strcmp(base, "timestamp") == 0)
+        return SQL_TYPE_TIMESTAMP;
 
     /* UUID and others */
-    if (strcmp(base, "uuid") == 0) return SQL_GUID;
+    if (strcmp(base, "uuid") == 0)
+        return SQL_GUID;
 
     /* Default fallback */
     return SQL_VARCHAR;

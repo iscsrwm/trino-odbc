@@ -22,21 +22,15 @@ SQLRETURN SQLSetEnvAttr(SQLHENV environment_handle, SQLINTEGER attribute,
     pthread_mutex_lock(&env->mutex);
 
     switch (attribute) {
-        case SQL_ATTR_ODBC_VERSION:
-            env->odbc_version = *(SQLUINTEGER *)value_ptr;
-            break;
+        case SQL_ATTR_ODBC_VERSION: env->odbc_version = *(SQLUINTEGER *)value_ptr; break;
 
         case SQL_ATTR_CONNECTION_POOLING:
             env->connection_pooling = *(SQLUINTEGER *)value_ptr;
             break;
 
-        case SQL_ATTR_CP_MATCH:
-            env->cp_match = *(SQLUINTEGER *)value_ptr;
-            break;
+        case SQL_ATTR_CP_MATCH: env->cp_match = *(SQLUINTEGER *)value_ptr; break;
 
-        case SQL_ATTR_ACCESS_MODE:
-            env->access_mode = *(SQLUINTEGER *)value_ptr;
-            break;
+        case SQL_ATTR_ACCESS_MODE: env->access_mode = *(SQLUINTEGER *)value_ptr; break;
 
         default:
             /* Unknown attribute — silently succeed (ODBC allows this) */
@@ -73,7 +67,8 @@ SQLRETURN SQLGetEnvAttr(SQLHENV environment_handle, SQLINTEGER attribute,
                 return SQL_ERROR;
             }
             *(SQLUINTEGER *)value_ptr = env->odbc_version;
-            if (string_length_ptr) *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (string_length_ptr)
+                *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_CONNECTION_POOLING:
@@ -82,7 +77,8 @@ SQLRETURN SQLGetEnvAttr(SQLHENV environment_handle, SQLINTEGER attribute,
                 return SQL_ERROR;
             }
             *(SQLUINTEGER *)value_ptr = env->connection_pooling;
-            if (string_length_ptr) *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (string_length_ptr)
+                *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_CP_MATCH:
@@ -91,7 +87,8 @@ SQLRETURN SQLGetEnvAttr(SQLHENV environment_handle, SQLINTEGER attribute,
                 return SQL_ERROR;
             }
             *(SQLUINTEGER *)value_ptr = env->cp_match;
-            if (string_length_ptr) *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (string_length_ptr)
+                *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_ACCESS_MODE:
@@ -100,12 +97,11 @@ SQLRETURN SQLGetEnvAttr(SQLHENV environment_handle, SQLINTEGER attribute,
                 return SQL_ERROR;
             }
             *(SQLUINTEGER *)value_ptr = env->access_mode;
-            if (string_length_ptr) *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (string_length_ptr)
+                *string_length_ptr = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
-        default:
-            pthread_mutex_unlock(&env->mutex);
-            return SQL_SUCCESS;
+        default: pthread_mutex_unlock(&env->mutex); return SQL_SUCCESS;
     }
 
     pthread_mutex_unlock(&env->mutex);

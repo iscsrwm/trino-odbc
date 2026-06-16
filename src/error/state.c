@@ -28,25 +28,26 @@ const char *trino_http_to_sqlstate(int http_status)
         case 502: return TRINO_SQLSTATE_PROTOCOL_ERROR;
         case 503: return TRINO_SQLSTATE_PROTOCOL_ERROR;
         case 504: return TRINO_SQLSTATE_TIMEOUT;
-        default:  return TRINO_SQLSTATE_REQUEST_FAILED;
+        default: return TRINO_SQLSTATE_REQUEST_FAILED;
     }
 }
 
 /* Format error message with context */
-void trino_format_error(SQLCHAR *buffer, SQLINTEGER buffer_length,
-                        const char *sqlstate, const char *context, const char *detail)
+void trino_format_error(SQLCHAR *buffer, SQLINTEGER buffer_length, const char *sqlstate,
+                        const char *context, const char *detail)
 {
-    if (!buffer || buffer_length == 0) return;
+    if (!buffer || buffer_length == 0)
+        return;
 
     if (detail) {
-        snprintf((char *)buffer, (size_t)buffer_length,
-                 "[SQLState=%s] %s: %s", sqlstate, context, detail);
+        snprintf((char *)buffer, (size_t)buffer_length, "[SQLState=%s] %s: %s", sqlstate,
+                 context, detail);
     } else if (context) {
-        snprintf((char *)buffer, (size_t)buffer_length,
-                 "[SQLState=%s] %s", sqlstate, context);
+        snprintf((char *)buffer, (size_t)buffer_length, "[SQLState=%s] %s", sqlstate,
+                 context);
     } else {
-        snprintf((char *)buffer, (size_t)buffer_length,
-                 "[SQLState=%s] Unknown error", sqlstate);
+        snprintf((char *)buffer, (size_t)buffer_length, "[SQLState=%s] Unknown error",
+                 sqlstate);
     }
     buffer[buffer_length - 1] = '\0';
 }

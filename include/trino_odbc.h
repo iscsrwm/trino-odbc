@@ -41,24 +41,24 @@ extern "C" {
  * fixed-width / ODBC types so they remain ABI-compatible.
  * ======================================================================== */
 
-typedef unsigned char  SQLBOOLEAN;
-typedef SQLUSMALLINT   SQLUWORD;
-typedef SQLSMALLINT    SQLSWORD;
-typedef SQLINTEGER     SQLLONG;
-typedef SQLUINTEGER    SQLULONG;
-typedef signed char    SQLBYTE;
-typedef unsigned char  SQLUBYTE;
-typedef short          SQLSHORT;
+typedef unsigned char SQLBOOLEAN;
+typedef SQLUSMALLINT SQLUWORD;
+typedef SQLSMALLINT SQLSWORD;
+typedef SQLINTEGER SQLLONG;
+typedef SQLUINTEGER SQLULONG;
+typedef signed char SQLBYTE;
+typedef unsigned char SQLUBYTE;
+typedef short SQLSHORT;
 typedef unsigned short SQLUSHORT;
 
 /* Length type used for SQLColAttribute-style buffer lengths in this codebase. */
-typedef SQLLEN         SQLBUFFER_LENGTH;
+typedef SQLLEN SQLBUFFER_LENGTH;
 
 /* Row identifier used by the internal result-set cursor helpers. */
-typedef SQLLEN         SQLROWID;
+typedef SQLLEN SQLROWID;
 
 #ifndef SQL_TRUE
-#define SQL_TRUE  1
+#define SQL_TRUE 1
 #endif
 #ifndef SQL_FALSE
 #define SQL_FALSE 0
@@ -87,7 +87,7 @@ size_t trino_wstrlen(const SQLWCHAR *wstr);
  * ======================================================================== */
 
 #define TRINO_MAX_IDENTIFIER_LEN 128
-#define TRINO_MAX_MESSAGE_LEN    512
+#define TRINO_MAX_MESSAGE_LEN 512
 
 /* ========================================================================
  * Driver version
@@ -102,10 +102,10 @@ size_t trino_wstrlen(const SQLWCHAR *wstr);
  * expose Trino query metadata to applications.
  * ======================================================================== */
 
-#define SQL_TRINO_QUERY_ID              12001
-#define SQL_TRINO_QUERY_STATE           12002
-#define SQL_TRINO_QUERY_ELAPSED_TIME    12003
-#define SQL_TRINO_QUERY_ROWS_PROCESSED  12004
+#define SQL_TRINO_QUERY_ID 12001
+#define SQL_TRINO_QUERY_STATE 12002
+#define SQL_TRINO_QUERY_ELAPSED_TIME 12003
+#define SQL_TRINO_QUERY_ROWS_PROCESSED 12004
 #define SQL_TRINO_QUERY_BYTES_PROCESSED 12005
 
 #ifdef __cplusplus

@@ -16,13 +16,15 @@ SQLRETURN SQLSetPos(SQLHSTMT statement_handle, SQLSETPOSIROW row_number,
     (void)operation;
     (void)lock_type;
 
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     /* Trino is read-only - no row updates allowed */
-    trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_SQLSTATE,
-                         0, "Trino does not support row updates via SQLSetPos");
+    trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_SQLSTATE, 0,
+                         "Trino does not support row updates via SQLSetPos");
     return SQL_ERROR;
 }

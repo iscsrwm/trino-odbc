@@ -9,7 +9,15 @@ int tests_run = 0;
 int tests_passed = 0;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* Test: Parameter binding - CHAR type */
 TEST(param_bind_char)
@@ -35,8 +43,8 @@ TEST(param_bind_char)
     /* Bind a CHAR parameter */
     char *param_value = "test";
     SQLLEN str_len = SQL_NTS;
-    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                           50, 0, param_value, strlen(param_value) + 1, &str_len);
+    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 50, 0,
+                           param_value, strlen(param_value) + 1, &str_len);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
@@ -68,8 +76,8 @@ TEST(param_bind_long)
     /* Bind a LONG parameter */
     long param_value = 12345;
     SQLLEN str_len_or_ind = 0;
-    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER,
-                           0, 0, &param_value, 0, &str_len_or_ind);
+    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0,
+                           &param_value, 0, &str_len_or_ind);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
@@ -101,8 +109,8 @@ TEST(param_bind_int)
     /* Bind an INT parameter */
     int param_value = 42;
     SQLLEN str_len_or_ind = 0;
-    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER,
-                           0, 0, &param_value, 0, &str_len_or_ind);
+    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0,
+                           &param_value, 0, &str_len_or_ind);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
@@ -134,8 +142,8 @@ TEST(param_bind_float)
     /* Bind a FLOAT parameter */
     float param_value = 3.14f;
     SQLLEN str_len_or_ind = 0;
-    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_FLOAT, SQL_REAL,
-                           0, 0, &param_value, 0, &str_len_or_ind);
+    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_FLOAT, SQL_REAL, 0, 0,
+                           &param_value, 0, &str_len_or_ind);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
@@ -167,8 +175,8 @@ TEST(param_bind_double)
     /* Bind a DOUBLE parameter */
     double param_value = 2.71828;
     SQLLEN str_len_or_ind = 0;
-    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
-                           0, 0, &param_value, 0, &str_len_or_ind);
+    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0,
+                           &param_value, 0, &str_len_or_ind);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
@@ -199,8 +207,8 @@ TEST(param_bind_null)
 
     /* Bind a NULL parameter */
     SQLLEN str_len_or_ind = SQL_NULL_DATA;
-    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                           0, 0, NULL, 0, &str_len_or_ind);
+    ret = SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, NULL,
+                           0, &str_len_or_ind);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
@@ -208,39 +216,55 @@ TEST(param_bind_null)
     SQLFreeHandle(SQL_HANDLE_ENV, env);
 }
 
-#define ASSERT_STREQ(a, b) do { tests_run++; if (strcmp((a),(b)) != 0) { printf("FAIL: %s:%d \"%s\" != \"%s\"\n", __func__, __LINE__, (a), (b)); return; } tests_passed++; } while(0)
+#define ASSERT_STREQ(a, b)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (strcmp((a), (b)) != 0) {                                                     \
+            printf("FAIL: %s:%d \"%s\" != \"%s\"\n", __func__, __LINE__, (a), (b));      \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* Verify that bound parameters are substituted into the final SQL text with
  * correct typing, quoting and NULL handling. */
 TEST(param_substitution_typed)
 {
-    SQLHENV env; SQLHDBC dbc; SQLHSTMT stmt;
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt;
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt), SQL_SUCCESS);
 
-    ASSERT_EQ(SQLPrepare(stmt, (SQLCHAR *)
-        "SELECT * FROM t WHERE name = ? AND age = ? AND score = ?", SQL_NTS),
+    ASSERT_EQ(
+        SQLPrepare(stmt,
+                   (SQLCHAR *)"SELECT * FROM t WHERE name = ? AND age = ? AND score = ?",
+                   SQL_NTS),
         SQL_SUCCESS);
 
-    char *name = "O'Brien";              /* embedded quote must be doubled */
+    char *name = "O'Brien"; /* embedded quote must be doubled */
     SQLINTEGER age = 42;
     double score = 9.5;
     SQLLEN nts = SQL_NTS, n0 = 0;
 
-    ASSERT_EQ(SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                               0, 0, name, strlen(name) + 1, &nts), SQL_SUCCESS);
-    ASSERT_EQ(SQLBindParameter(stmt, 2, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER,
-                               0, 0, &age, 0, &n0), SQL_SUCCESS);
-    ASSERT_EQ(SQLBindParameter(stmt, 3, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE,
-                               0, 0, &score, 0, &n0), SQL_SUCCESS);
+    ASSERT_EQ(SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0,
+                               name, strlen(name) + 1, &nts),
+              SQL_SUCCESS);
+    ASSERT_EQ(SQLBindParameter(stmt, 2, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0,
+                               &age, 0, &n0),
+              SQL_SUCCESS);
+    ASSERT_EQ(SQLBindParameter(stmt, 3, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_DOUBLE, 0, 0,
+                               &score, 0, &n0),
+              SQL_SUCCESS);
 
-    char *sql = trino_stmt_apply_params((trino_stmt_t *)stmt,
+    char *sql = trino_stmt_apply_params(
+        (trino_stmt_t *)stmt,
         (const SQLCHAR *)"SELECT * FROM t WHERE name = ? AND age = ? AND score = ?");
     ASSERT_EQ(sql != NULL, 1);
     if (sql) {
-        ASSERT_STREQ(sql,
-            "SELECT * FROM t WHERE name = 'O''Brien' AND age = 42 AND score = 9.5");
+        ASSERT_STREQ(
+            sql, "SELECT * FROM t WHERE name = 'O''Brien' AND age = 42 AND score = 9.5");
         free(sql);
     }
 
@@ -253,7 +277,9 @@ TEST(param_substitution_typed)
  * string literal is left untouched. */
 TEST(param_substitution_null_and_literal)
 {
-    SQLHENV env; SQLHDBC dbc; SQLHSTMT stmt;
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt;
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt), SQL_SUCCESS);
@@ -262,8 +288,9 @@ TEST(param_substitution_null_and_literal)
     ASSERT_EQ(SQLPrepare(stmt, (SQLCHAR *)query, SQL_NTS), SQL_SUCCESS);
 
     SQLLEN ind = SQL_NULL_DATA;
-    ASSERT_EQ(SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR,
-                               0, 0, NULL, 0, &ind), SQL_SUCCESS);
+    ASSERT_EQ(SQLBindParameter(stmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0,
+                               NULL, 0, &ind),
+              SQL_SUCCESS);
 
     char *sql = trino_stmt_apply_params((trino_stmt_t *)stmt, (const SQLCHAR *)query);
     ASSERT_EQ(sql != NULL, 1);

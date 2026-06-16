@@ -13,7 +13,8 @@ char *trino_build_request_url(const char *base_url, const char *session_properti
     }
 
     char *url = malloc(strlen(base_url) + strlen(session_properties) + 32);
-    if (!url) return NULL;
+    if (!url)
+        return NULL;
 
     snprintf(url, strlen(base_url) + strlen(session_properties) + 32,
              "%s?sessionProperties=%s", base_url, session_properties);
@@ -23,7 +24,8 @@ char *trino_build_request_url(const char *base_url, const char *session_properti
 /* Format client tags as JSON array if not already */
 char *trino_format_client_tags(const char *tags)
 {
-    if (!tags) return NULL;
+    if (!tags)
+        return NULL;
 
     /* If already JSON (starts with [), return as-is */
     if (tags[0] == '[') {
@@ -32,7 +34,8 @@ char *trino_format_client_tags(const char *tags)
 
     /* Wrap in JSON array */
     char *result = malloc(strlen(tags) + 32);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     snprintf(result, strlen(tags) + 32, "[\"%s\"]", tags);
     return result;

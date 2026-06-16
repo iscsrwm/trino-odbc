@@ -69,15 +69,30 @@ extern int tests_run;
 extern int tests_passed;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
-#define ASSERT_STREQ(a, b) do { tests_run++; if (strcmp((a),(b)) != 0) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_STREQ(a, b)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (strcmp((a), (b)) != 0) {                                                     \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 TEST(conn_string_basic)
 {
     trino_conn_config_t config;
     SQLRETURN ret = trino_parse_conn_string(
-        "Server=myhost;Port=8443;User=admin;Catalog=hive;Schema=default",
-        &config);
+        "Server=myhost;Port=8443;User=admin;Catalog=hive;Schema=default", &config);
     ASSERT_EQ(ret, SQL_SUCCESS);
     ASSERT_STREQ((char *)config.server, "myhost");
     ASSERT_EQ(config.port, 8443);
@@ -100,8 +115,7 @@ TEST(conn_string_ssl)
 {
     trino_conn_config_t config;
     SQLRETURN ret = trino_parse_conn_string(
-        "Server=secure;SSL=true;Authentication=PASSWORD",
-        &config);
+        "Server=secure;SSL=true;Authentication=PASSWORD", &config);
     ASSERT_EQ(ret, SQL_SUCCESS);
     ASSERT_EQ(config.ssl_enabled, 1);
     ASSERT_STREQ((char *)config.auth_type, "PASSWORD");

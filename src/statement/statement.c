@@ -15,17 +15,21 @@
 static const char *skip_ws_and_comments(const char *p)
 {
     for (;;) {
-        while (*p && isspace((unsigned char)*p)) p++;
+        while (*p && isspace((unsigned char)*p))
+            p++;
 
         if (p[0] == '-' && p[1] == '-') {
             p += 2;
-            while (*p && *p != '\n') p++;
+            while (*p && *p != '\n')
+                p++;
             continue;
         }
         if (p[0] == '/' && p[1] == '*') {
             p += 2;
-            while (*p && !(p[0] == '*' && p[1] == '/')) p++;
-            if (*p) p += 2; /* skip closing */
+            while (*p && !(p[0] == '*' && p[1] == '/'))
+                p++;
+            if (*p)
+                p += 2; /* skip closing */
             continue;
         }
         break;
@@ -40,12 +44,14 @@ static size_t match_keyword(const char *p, const char *kw)
 {
     size_t i = 0;
     while (kw[i]) {
-        if (toupper((unsigned char)p[i]) != (unsigned char)kw[i]) return 0;
+        if (toupper((unsigned char)p[i]) != (unsigned char)kw[i])
+            return 0;
         i++;
     }
     /* Ensure a word boundary follows the keyword. */
     unsigned char next = (unsigned char)p[i];
-    if (next == '_' || isalnum(next)) return 0;
+    if (next == '_' || isalnum(next))
+        return 0;
     return i;
 }
 
@@ -55,7 +61,8 @@ static size_t match_keyword(const char *p, const char *kw)
  * keyword does not determine the statement type). */
 bool trino_sql_is_write_op(const SQLCHAR *sql)
 {
-    if (!sql) return false;
+    if (!sql)
+        return false;
     const char *p = skip_ws_and_comments((const char *)sql);
 
     /* A leading CTE (WITH ...) precedes the actual statement; skip the CTE
@@ -68,11 +75,17 @@ bool trino_sql_is_write_op(const SQLCHAR *sql)
         p += 4;
         int depth = 0;
         while (*p) {
-            if (*p == '(') depth++;
-            else if (*p == ')') { if (depth > 0) depth--; }
-            else if (depth == 0) {
+            if (*p == '(')
+                depth++;
+            else if (*p == ')') {
+                if (depth > 0)
+                    depth--;
+            } else if (depth == 0) {
                 const char *q = skip_ws_and_comments(p);
-                if (q != p) { p = q; continue; }
+                if (q != p) {
+                    p = q;
+                    continue;
+                }
                 if (match_keyword(p, "INSERT") || match_keyword(p, "UPDATE") ||
                     match_keyword(p, "DELETE") || match_keyword(p, "MERGE")) {
                     return true;
@@ -87,13 +100,11 @@ bool trino_sql_is_write_op(const SQLCHAR *sql)
     }
 
     static const char *write_keywords[] = {
-        "INSERT", "UPDATE", "DELETE", "MERGE",
-        "CREATE", "DROP", "ALTER", "TRUNCATE",
-        "GRANT", "REVOKE", "COMMENT", "CALL",
-        "REFRESH", "ANALYZE", NULL
-    };
+        "INSERT", "UPDATE", "DELETE",  "MERGE", "CREATE",  "DROP",    "ALTER", "TRUNCATE",
+        "GRANT",  "REVOKE", "COMMENT", "CALL",  "REFRESH", "ANALYZE", NULL};
     for (int i = 0; write_keywords[i]; i++) {
-        if (match_keyword(p, write_keywords[i])) return true;
+        if (match_keyword(p, write_keywords[i]))
+            return true;
     }
     return false;
 }
@@ -105,7 +116,8 @@ bool trino_sql_is_write_op(const SQLCHAR *sql)
 trino_stmt_t *trino_stmt_create(trino_conn_t *conn)
 {
     trino_stmt_t *stmt = calloc(1, sizeof(*stmt));
-    if (!stmt) return NULL;
+    if (!stmt)
+        return NULL;
 
     stmt->type = TRINO_HANDLE_STMT;
     stmt->conn = conn;
@@ -130,7 +142,8 @@ trino_stmt_t *trino_stmt_create(trino_conn_t *conn)
 
 void trino_stmt_destroy(trino_stmt_t *stmt)
 {
-    if (!stmt) return;
+    if (!stmt)
+        return;
 
     if (stmt->conn) {
         trino_conn_unregister_stmt(stmt->conn, stmt);
@@ -144,9 +157,12 @@ void trino_stmt_destroy(trino_stmt_t *stmt)
         trino_resultset_destroy((trino_resultset_t *)stmt->resultset);
     }
 
-    if (stmt->ipd) trino_desc_destroy(stmt->ipd);
-    if (stmt->ird) trino_desc_destroy(stmt->ird);
-    if (stmt->ard) trino_desc_destroy(stmt->ard);
+    if (stmt->ipd)
+        trino_desc_destroy(stmt->ipd);
+    if (stmt->ird)
+        trino_desc_destroy(stmt->ird);
+    if (stmt->ard)
+        trino_desc_destroy(stmt->ard);
 
     free(stmt->row_status);
 
@@ -161,10 +177,12 @@ void trino_stmt_destroy(trino_stmt_t *stmt)
 SQLRETURN SQLPrepare(SQLHSTMT statement_handle, SQLCHAR *statement_text,
                      SQLINTEGER text_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     pthread_mutex_lock(&stmt->mutex);
 
@@ -188,8 +206,8 @@ SQLRETURN SQLPrepare(SQLHSTMT statement_handle, SQLCHAR *statement_text,
 
     stmt->sql_text = malloc((size_t)stmt->sql_length + 1);
     if (!stmt->sql_text) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_MEMORY_ALLOCATION,
-                             0, "Memory allocation failed");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_MEMORY_ALLOCATION, 0,
+                             "Memory allocation failed");
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
@@ -210,18 +228,20 @@ SQLRETURN SQLPrepare(SQLHSTMT statement_handle, SQLCHAR *statement_text,
 
 SQLRETURN SQLExecute(SQLHSTMT statement_handle)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->prepared) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CURSOR,
-                             0, "Statement not prepared");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CURSOR, 0,
+                             "Statement not prepared");
         return SQL_ERROR;
     }
     if (!stmt->sql_text) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CURSOR,
-                             0, "No SQL text");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CURSOR, 0,
+                             "No SQL text");
         return SQL_ERROR;
     }
 
@@ -235,14 +255,17 @@ SQLRETURN SQLExecute(SQLHSTMT statement_handle)
 SQLRETURN SQLExecDirect(SQLHSTMT statement_handle, SQLCHAR *statement_text,
                         SQLINTEGER text_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     /* Prepare first */
     SQLRETURN ret = SQLPrepare(statement_handle, statement_text, text_length);
-    if (ret != SQL_SUCCESS) return ret;
+    if (ret != SQL_SUCCESS)
+        return ret;
 
     return trino_stmt_exec_direct(stmt, stmt->sql_text, stmt->sql_length);
 }
@@ -254,8 +277,8 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
 
     if (!stmt || !sql || !stmt->conn) {
         if (stmt) {
-            trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                                 0, "Invalid connection");
+            trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                                 "Invalid connection");
         }
         return SQL_ERROR;
     }
@@ -275,8 +298,8 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
     /* Get HTTP client */
     trino_http_client_t *client = trino_conn_get_http_client(stmt->conn);
     if (!client) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_REQUEST_FAILED,
-                             0, "Failed to create HTTP client");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_REQUEST_FAILED, 0,
+                             "Failed to create HTTP client");
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
@@ -288,31 +311,28 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
     /* Substitute any bound parameters into the SQL text before sending. */
     char *final_sql = trino_stmt_apply_params(stmt, sql);
     if (!final_sql) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_MEMORY_ALLOCATION,
-                             0, "Failed to bind parameters");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_MEMORY_ALLOCATION, 0,
+                             "Failed to bind parameters");
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
 
     /* Execute query */
     SQLRETURN retcode = SQL_SUCCESS;
-    trino_query_results_t *results = trino_http_client_query(client,
-                                                             (const SQLCHAR *)final_sql,
-                                                             &retcode);
+    trino_query_results_t *results =
+        trino_http_client_query(client, (const SQLCHAR *)final_sql, &retcode);
     free(final_sql);
 
     if (!results) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_REQUEST_FAILED,
-                             0, "Query execution failed");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_REQUEST_FAILED, 0,
+                             "Query execution failed");
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
 
     if (results->has_error) {
-        trino_diag_from_trino_error(&stmt->diagnostics,
-                                    results->error_name,
-                                    results->error_message,
-                                    results->error_type);
+        trino_diag_from_trino_error(&stmt->diagnostics, results->error_name,
+                                    results->error_message, results->error_type);
         trino_query_results_free(results);
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
@@ -378,16 +398,19 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
 
 SQLRETURN SQLCancel(SQLHSTMT statement_handle)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->query_id) {
         return SQL_SUCCESS; /* nothing to cancel */
     }
 
     trino_http_client_t *client = trino_conn_get_http_client(stmt->conn);
-    if (!client) return SQL_ERROR;
+    if (!client)
+        return SQL_ERROR;
 
     SQLRETURN ret = trino_http_client_kill_query(client, stmt->query_id);
 
@@ -407,7 +430,8 @@ SQLRETURN SQLCancel(SQLHSTMT statement_handle)
 SQLRETURN SQLMoreResults(SQLHSTMT statement_handle)
 {
     /* Trino doesn't support multiple result sets from a single statement */
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     return SQL_NO_DATA;
 }
@@ -418,10 +442,12 @@ SQLRETURN SQLMoreResults(SQLHSTMT statement_handle)
 
 SQLRETURN SQLNumResultCols(SQLHSTMT statement_handle, SQLSMALLINT *column_count_ptr)
 {
-    if (!statement_handle || !column_count_ptr) return SQL_INVALID_HANDLE;
+    if (!statement_handle || !column_count_ptr)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     pthread_mutex_lock(&stmt->mutex);
     *column_count_ptr = (SQLSMALLINT)stmt->column_count;
@@ -436,10 +462,12 @@ SQLRETURN SQLNumResultCols(SQLHSTMT statement_handle, SQLSMALLINT *column_count_
 
 SQLRETURN SQLRowCount(SQLHSTMT statement_handle, SQLLEN *row_count_ptr)
 {
-    if (!statement_handle || !row_count_ptr) return SQL_INVALID_HANDLE;
+    if (!statement_handle || !row_count_ptr)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     pthread_mutex_lock(&stmt->mutex);
     *row_count_ptr = stmt->row_count;
@@ -457,25 +485,25 @@ SQLRETURN SQLColAttribute(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
                           SQLSMALLINT buffer_length, SQLSMALLINT *string_length,
                           SQLLEN *numeric_attribute)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     SQLINTEGER str_len = 0;
-    SQLRETURN ret = trino_stmt_col_attribute(stmt, column_number,
-                                             (SQLINTEGER)field_identifier,
-                                             (SQLCHAR *)character_attribute,
-                                             (SQLBUFFER_LENGTH)buffer_length,
-                                             &str_len, numeric_attribute);
-    if (string_length) *string_length = (SQLSMALLINT)str_len;
+    SQLRETURN ret = trino_stmt_col_attribute(
+        stmt, column_number, (SQLINTEGER)field_identifier, (SQLCHAR *)character_attribute,
+        (SQLBUFFER_LENGTH)buffer_length, &str_len, numeric_attribute);
+    if (string_length)
+        *string_length = (SQLSMALLINT)str_len;
     return ret;
 }
 
-SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col,
-                                   SQLINTEGER field, SQLCHAR *char_attr,
-                                   SQLBUFFER_LENGTH buffer_length, SQLINTEGER *str_len,
-                                   SQLLEN *numeric_attr)
+SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTEGER field,
+                                   SQLCHAR *char_attr, SQLBUFFER_LENGTH buffer_length,
+                                   SQLINTEGER *str_len, SQLLEN *numeric_attr)
 {
     if (!stmt || !stmt->ird || col == 0 || col > stmt->ird->record_count) {
         return SQL_ERROR;
@@ -490,12 +518,14 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col,
                 strncpy((char *)char_attr, (char *)rec->column_name,
                         (size_t)buffer_length - 1);
                 ((char *)char_attr)[buffer_length - 1] = '\0';
-                if (str_len) *str_len = (SQLINTEGER)strlen((char *)char_attr);
+                if (str_len)
+                    *str_len = (SQLINTEGER)strlen((char *)char_attr);
             }
             break;
 
         case SQL_DESC_TYPE:
-            if (numeric_attr) *numeric_attr = (SQLLEN)rec->sql_type;
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)rec->sql_type;
             break;
 
         case SQL_DESC_TYPE_NAME:
@@ -503,28 +533,32 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col,
                 strncpy((char *)char_attr, (char *)rec->type_name,
                         (size_t)buffer_length - 1);
                 ((char *)char_attr)[buffer_length - 1] = '\0';
-                if (str_len) *str_len = (SQLINTEGER)strlen((char *)char_attr);
+                if (str_len)
+                    *str_len = (SQLINTEGER)strlen((char *)char_attr);
             }
             break;
 
         case SQL_DESC_PRECISION:
-            if (numeric_attr) *numeric_attr = (SQLLEN)rec->column_size;
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)rec->column_size;
             break;
 
         case SQL_DESC_SCALE:
-            if (numeric_attr) *numeric_attr = (SQLLEN)rec->decimal_digits;
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)rec->decimal_digits;
             break;
 
         case SQL_DESC_NULLABLE:
-            if (numeric_attr) *numeric_attr = (SQLLEN)rec->nullable;
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)rec->nullable;
             break;
 
         case SQL_DESC_DISPLAY_SIZE:
-            if (numeric_attr) *numeric_attr = (SQLLEN)rec->column_size;
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)rec->column_size;
             break;
 
-        default:
-            break;
+        default: break;
     }
 
     return SQL_SUCCESS;
@@ -537,43 +571,34 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col,
 SQLRETURN SQLSetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute,
                          SQLPOINTER value_ptr, SQLINTEGER string_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     return trino_stmt_set_attr(stmt, attribute, value_ptr, string_length);
 }
 
-SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr,
-                              SQLPOINTER value, SQLINTEGER str_len)
+SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER value,
+                              SQLINTEGER str_len)
 {
     (void)str_len;
     pthread_mutex_lock(&stmt->mutex);
 
     switch (attr) {
-        case SQL_ATTR_QUERY_TIMEOUT:
-            stmt->query_timeout = *(SQLUINTEGER *)value;
-            break;
+        case SQL_ATTR_QUERY_TIMEOUT: stmt->query_timeout = *(SQLUINTEGER *)value; break;
 
-        case SQL_ATTR_CURSOR_TYPE:
-            stmt->cursor_type = *(SQLUINTEGER *)value;
-            break;
+        case SQL_ATTR_CURSOR_TYPE: stmt->cursor_type = *(SQLUINTEGER *)value; break;
 
-        case SQL_ATTR_CONCURRENCY:
-            stmt->concurrency = *(SQLUINTEGER *)value;
-            break;
+        case SQL_ATTR_CONCURRENCY: stmt->concurrency = *(SQLUINTEGER *)value; break;
 
-        case SQL_ATTR_MAX_ROWS:
-            stmt->max_rows = *(SQLULEN *)value;
-            break;
+        case SQL_ATTR_MAX_ROWS: stmt->max_rows = *(SQLULEN *)value; break;
 
-        case SQL_ATTR_ROW_ARRAY_SIZE:
-            stmt->row_array_size = *(SQLULEN *)value;
-            break;
+        case SQL_ATTR_ROW_ARRAY_SIZE: stmt->row_array_size = *(SQLULEN *)value; break;
 
-        default:
-            break;
+        default: break;
     }
 
     pthread_mutex_unlock(&stmt->mutex);
@@ -584,18 +609,19 @@ SQLRETURN SQLGetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute,
                          SQLPOINTER value_ptr, SQLINTEGER buffer_length,
                          SQLINTEGER *string_length_ptr)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
 
     return trino_stmt_get_attr(stmt, attribute, value_ptr, buffer_length,
                                string_length_ptr);
 }
 
-SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr,
-                              SQLPOINTER value, SQLINTEGER buffer_length,
-                              SQLINTEGER *str_len)
+SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER value,
+                              SQLINTEGER buffer_length, SQLINTEGER *str_len)
 {
     (void)buffer_length;
 
@@ -604,32 +630,35 @@ SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr,
     switch (attr) {
         case SQL_ATTR_QUERY_TIMEOUT:
             *(SQLUINTEGER *)value = stmt->query_timeout;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_CURSOR_TYPE:
             *(SQLUINTEGER *)value = stmt->cursor_type;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_CONCURRENCY:
             *(SQLUINTEGER *)value = stmt->concurrency;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_MAX_ROWS:
             *(SQLULEN *)value = stmt->max_rows;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLULEN);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLULEN);
             break;
 
         case SQL_ATTR_ROW_ARRAY_SIZE:
             *(SQLULEN *)value = stmt->row_array_size;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLULEN);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLULEN);
             break;
 
-        default:
-            pthread_mutex_unlock(&stmt->mutex);
-            return SQL_SUCCESS;
+        default: pthread_mutex_unlock(&stmt->mutex); return SQL_SUCCESS;
     }
 
     pthread_mutex_unlock(&stmt->mutex);
@@ -643,10 +672,12 @@ SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr,
 SQLRETURN SQLSetConnectAttr(SQLHDBC connection_handle, SQLINTEGER attribute,
                             SQLPOINTER value_ptr, SQLINTEGER string_length)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     return trino_conn_set_attr(conn, attribute, value_ptr, string_length);
 }
@@ -655,10 +686,12 @@ SQLRETURN SQLGetConnectAttr(SQLHDBC connection_handle, SQLINTEGER attribute,
                             SQLPOINTER value_ptr, SQLINTEGER buffer_length,
                             SQLINTEGER *string_length_ptr)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     return trino_conn_get_attr(conn, attribute, value_ptr, buffer_length,
                                string_length_ptr);

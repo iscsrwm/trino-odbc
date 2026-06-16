@@ -9,7 +9,15 @@ extern int tests_run;
 extern int tests_passed;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d\n", __func__, __LINE__); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d\n", __func__, __LINE__);                                 \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 TEST(trino_to_odbc_types)
 {

@@ -68,10 +68,9 @@ live-trino:
       done
     - ./build/test/live_tests
 
-# Verify formatting against .clang-format (advisory).
+# Verify formatting against .clang-format (gating: the tree is fully formatted).
 format-check:
   stage: analyze
-  allow_failure: true
   before_script:
     - apt-get update -qq
     - apt-get install -y -qq clang-format

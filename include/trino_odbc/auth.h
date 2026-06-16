@@ -19,8 +19,7 @@ typedef enum {
 trino_auth_method_t trino_auth_parse(const char *auth_type);
 
 /* Apply authentication to a curl easy handle */
-SQLRETURN trino_auth_apply(CURL *handle, trino_auth_method_t method,
-                           const char *user, const char *password,
-                           const char *ssl_truststore);
+SQLRETURN trino_auth_apply(CURL *handle, trino_auth_method_t method, const char *user,
+                           const char *password, const char *ssl_truststore);
 
 #endif /* TRINO_ODBC_AUTH_H */

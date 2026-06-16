@@ -26,10 +26,10 @@ typedef enum {
 #define TRINO_MAX_TYPE_NAME 128
 
 typedef struct {
-    SQLCHAR   name[TRINO_MAX_IDENTIFIER_LEN + 1];
-    SQLCHAR   type[TRINO_MAX_TYPE_NAME];
+    SQLCHAR name[TRINO_MAX_IDENTIFIER_LEN + 1];
+    SQLCHAR type[TRINO_MAX_TYPE_NAME];
     SQLSMALLINT odbc_type;
-    SQLULEN   column_size;
+    SQLULEN column_size;
     SQLSMALLINT decimal_digits;
     SQLSMALLINT nullable;
 } trino_column_meta_t;
@@ -42,35 +42,35 @@ typedef struct {
 
 typedef struct {
     /* Query identification (C strings). */
-    char      query_id[64];
-    char     *next_uri;          /* NULL when done */
+    char query_id[64];
+    char *next_uri; /* NULL when done */
     trino_query_state_t state;
 
     /* Column metadata */
     trino_column_meta_t *columns;
-    SQLULEN              column_count;
+    SQLULEN column_count;
 
     /* Data rows — each cell is a NUL-terminated C string (NULL == SQL NULL). */
-    char            ***rows;     /* rows[row][col] */
-    SQLULEN           row_count;
-    SQLULEN           row_capacity;
+    char ***rows; /* rows[row][col] */
+    SQLULEN row_count;
+    SQLULEN row_capacity;
 
     /* Error info (if query failed) */
-    bool              has_error;
-    char             *error_name;
-    char             *error_message;
-    char             *error_type;
-    char             *error_uri;
-    SQLULEN           error_code;
+    bool has_error;
+    char *error_name;
+    char *error_message;
+    char *error_type;
+    char *error_uri;
+    SQLULEN error_code;
 
     /* Query statistics */
-    SQLULEN           rows_processed;
-    SQLULEN           bytes_processed;
-    SQLDOUBLE         elapsed_time;
-    char             *stats_uri;
+    SQLULEN rows_processed;
+    SQLULEN bytes_processed;
+    SQLDOUBLE elapsed_time;
+    char *stats_uri;
 
     /* Memory info */
-    char             *task_info_uri;
+    char *task_info_uri;
 } trino_query_results_t;
 
 /* ========================================================================
@@ -78,32 +78,32 @@ typedef struct {
  * ======================================================================== */
 
 typedef struct trino_http_client_s {
-    CURL          *easy_handle;
-    CURLSH       *share_handle;   /* shared handle for connection reuse */
+    CURL *easy_handle;
+    CURLSH *share_handle; /* shared handle for connection reuse */
 
     /* Connection config (heap-allocated C strings). */
-    char         *server_url;     /* e.g., "http://localhost:8080" */
-    char         *user;
-    char         *password;
-    char         *auth_type;
-    bool          ssl_enabled;
-    char         *ssl_truststore;
-    char         *client_tags_json;
-    char         *session_properties_json;
-    char         *source;
+    char *server_url; /* e.g., "http://localhost:8080" */
+    char *user;
+    char *password;
+    char *auth_type;
+    bool ssl_enabled;
+    char *ssl_truststore;
+    char *client_tags_json;
+    char *session_properties_json;
+    char *source;
 
     /* Timeouts */
-    SQLUINTEGER   connect_timeout;
-    SQLUINTEGER   request_timeout;
+    SQLUINTEGER connect_timeout;
+    SQLUINTEGER request_timeout;
 
     /* Callback for cancellation check */
-    int          (*cancel_check)(void *);
-    void        *cancel_check_ctx;
+    int (*cancel_check)(void *);
+    void *cancel_check_ctx;
 } trino_http_client_t;
 
 /* Initialize / destroy HTTP client */
 trino_http_client_t *trino_http_client_create(void);
-void                 trino_http_client_destroy(trino_http_client_t *client);
+void trino_http_client_destroy(trino_http_client_t *client);
 
 /* ------------------------------------------------------------------------
  * Test transport hook
@@ -128,27 +128,24 @@ void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx);
 void trino_http_sanitize_header_value(const char *value, char *out, size_t out_size);
 
 /* Configure client from connection */
-SQLRETURN trino_http_client_configure(trino_http_client_t *client,
-                                     const char *server, SQLINTEGER port,
-                                     const char *user, const char *password,
-                                     const char *auth_type, bool ssl,
-                                     const char *ssl_truststore,
-                                     const char *client_tags_json,
-                                     const char *session_properties_json,
-                                     const char *source);
+SQLRETURN trino_http_client_configure(trino_http_client_t *client, const char *server,
+                                      SQLINTEGER port, const char *user,
+                                      const char *password, const char *auth_type,
+                                      bool ssl, const char *ssl_truststore,
+                                      const char *client_tags_json,
+                                      const char *session_properties_json,
+                                      const char *source);
 
 /* Execute a SQL query — returns QueryResults (caller must free) */
 trino_query_results_t *trino_http_client_query(trino_http_client_t *client,
-                                               const SQLCHAR *sql,
-                                               SQLRETURN *retcode);
+                                               const SQLCHAR *sql, SQLRETURN *retcode);
 
 /* Fetch next batch of results */
 SQLRETURN trino_http_client_fetch_next(trino_http_client_t *client,
                                        trino_query_results_t *results);
 
 /* Kill a running query */
-SQLRETURN trino_http_client_kill_query(trino_http_client_t *client,
-                                       const char *query_id);
+SQLRETURN trino_http_client_kill_query(trino_http_client_t *client, const char *query_id);
 
 /* Free query results */
 void trino_query_results_free(trino_query_results_t *results);
@@ -163,7 +160,8 @@ const char *trino_type_name(SQLSMALLINT odbc_type);
 trino_column_meta_t *trino_parse_columns(const char *json, SQLULEN *column_count);
 
 /* Parse column metadata from JSON columns array using json-c */
-trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array, SQLULEN *column_count);
+trino_column_meta_t *trino_parse_columns_jsonc(json_object *columns_array,
+                                               SQLULEN *column_count);
 
 /* Parse a full Trino QueryResults JSON document into a results structure.
  *

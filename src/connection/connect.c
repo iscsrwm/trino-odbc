@@ -15,13 +15,16 @@
  * NULL for a NULL input (caller treats as absent). */
 static char *odbc_strdup(const SQLCHAR *str, SQLSMALLINT len)
 {
-    if (!str) return NULL;
+    if (!str)
+        return NULL;
     if (len == SQL_NTS) {
         return strdup((const char *)str);
     }
-    if (len < 0) return NULL;
+    if (len < 0)
+        return NULL;
     char *out = malloc((size_t)len + 1);
-    if (!out) return NULL;
+    if (!out)
+        return NULL;
     memcpy(out, str, (size_t)len);
     out[len] = '\0';
     return out;
@@ -31,19 +34,20 @@ static char *odbc_strdup(const SQLCHAR *str, SQLSMALLINT len)
  * SQLConnect — connect using a DSN (or server name) + user + auth
  * ======================================================================== */
 
-SQLRETURN SQLConnect(SQLHDBC connection_handle,
-                     SQLCHAR *server_name, SQLSMALLINT name_length1,
-                     SQLCHAR *user_name, SQLSMALLINT name_length2,
-                     SQLCHAR *authentication, SQLSMALLINT name_length3)
+SQLRETURN SQLConnect(SQLHDBC connection_handle, SQLCHAR *server_name,
+                     SQLSMALLINT name_length1, SQLCHAR *user_name,
+                     SQLSMALLINT name_length2, SQLCHAR *authentication,
+                     SQLSMALLINT name_length3)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     if (conn->connected) {
-        trino_diag_set_error(&conn->diagnostics, "08002", 0,
-                             "Connection name in use");
+        trino_diag_set_error(&conn->diagnostics, "08002", 0, "Connection name in use");
         return SQL_ERROR;
     }
 
@@ -95,20 +99,20 @@ SQLRETURN SQLConnect(SQLHDBC connection_handle,
 SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
                            SQLCHAR *in_conn_str, SQLSMALLINT in_conn_str_len,
                            SQLCHAR *out_conn_str, SQLSMALLINT out_conn_str_max,
-                           SQLSMALLINT *out_conn_str_len,
-                           SQLUSMALLINT driver_completion)
+                           SQLSMALLINT *out_conn_str_len, SQLUSMALLINT driver_completion)
 {
     (void)window_handle;
     (void)driver_completion; /* No interactive prompting (no GUI). */
 
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     if (conn->connected) {
-        trino_diag_set_error(&conn->diagnostics, "08002", 0,
-                             "Connection name in use");
+        trino_diag_set_error(&conn->diagnostics, "08002", 0, "Connection name in use");
         return SQL_ERROR;
     }
 
@@ -147,7 +151,8 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
         }
         memcpy(out_conn_str, conn_str, copy_len);
         out_conn_str[copy_len] = '\0';
-        if (out_conn_str_len) *out_conn_str_len = (SQLSMALLINT)copy_len;
+        if (out_conn_str_len)
+            *out_conn_str_len = (SQLSMALLINT)copy_len;
     } else if (out_conn_str_len) {
         *out_conn_str_len = (SQLSMALLINT)strlen(conn_str);
     }
@@ -162,14 +167,15 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
 
 SQLRETURN SQLDisconnect(SQLHDBC connection_handle)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     if (!conn->connected) {
-        trino_diag_set_error(&conn->diagnostics, "08003", 0,
-                             "Connection not open");
+        trino_diag_set_error(&conn->diagnostics, "08003", 0, "Connection not open");
         return SQL_ERROR;
     }
 

@@ -71,7 +71,8 @@ void trino_diag_set_error(trino_diagnostics_t *diag, const char *sqlstate,
 /* Map Trino error types to SQLState */
 static const char *map_trino_error_type(const char *error_type)
 {
-    if (!error_type) return TRINO_SQLSTATE_QUERY_FAILED;
+    if (!error_type)
+        return TRINO_SQLSTATE_QUERY_FAILED;
 
     if (strstr(error_type, "INTERNAL_ERROR"))
         return TRINO_SQLSTATE_QUERY_FAILED;
@@ -87,10 +88,8 @@ static const char *map_trino_error_type(const char *error_type)
     return TRINO_SQLSTATE_QUERY_FAILED;
 }
 
-void trino_diag_from_trino_error(trino_diagnostics_t *diag,
-                                 const char *error_name,
-                                 const char *error_message,
-                                 const char *error_type)
+void trino_diag_from_trino_error(trino_diagnostics_t *diag, const char *error_name,
+                                 const char *error_message, const char *error_type)
 {
     const char *sqlstate = map_trino_error_type(error_type);
     SQLINTEGER native_error = 0;

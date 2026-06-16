@@ -13,11 +13,51 @@ extern int tests_run;
 extern int tests_passed;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
-#define ASSERT_TRUE(expr) do { tests_run++; if (!(expr)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr); return; } tests_passed++; } while(0)
-#define ASSERT_FALSE(expr) do { tests_run++; if ((expr)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr); return; } tests_passed++; } while(0)
-#define ASSERT_NOT_NULL(ptr) do { tests_run++; if (!(ptr)) { printf("FAIL: %s:%d %s is NULL\n", __func__, __LINE__, #ptr); return; } tests_passed++; } while(0)
-#define ASSERT_NULL(ptr) do { tests_run++; if ((ptr)) { printf("FAIL: %s:%d %s is not NULL\n", __func__, __LINE__, #ptr); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_TRUE(expr)                                                                \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(expr)) {                                                                   \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr);                       \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_FALSE(expr)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((expr)) {                                                                    \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr);                       \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NOT_NULL(ptr)                                                             \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(ptr)) {                                                                    \
+            printf("FAIL: %s:%d %s is NULL\n", __func__, __LINE__, #ptr);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NULL(ptr)                                                                 \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((ptr)) {                                                                     \
+            printf("FAIL: %s:%d %s is not NULL\n", __func__, __LINE__, #ptr);            \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* Forward declarations */
 void test_txn_invalid_handle(void);
@@ -245,7 +285,8 @@ TEST(batch_param_binding)
 
     /* Verify it was set */
     SQLULEN get_row_array_size = 0;
-    ret = SQLGetStmtAttr(stmt, SQL_ATTR_ROW_ARRAY_SIZE, &get_row_array_size, sizeof(get_row_array_size), NULL);
+    ret = SQLGetStmtAttr(stmt, SQL_ATTR_ROW_ARRAY_SIZE, &get_row_array_size,
+                         sizeof(get_row_array_size), NULL);
     ASSERT_EQ(ret, SQL_SUCCESS);
     ASSERT_EQ(get_row_array_size, 100);
 
@@ -276,7 +317,8 @@ TEST(batch_row_array_size)
     /* Default row array size is 0 (unlimited) or 1 depending on implementation */
     /* We just verify that getting the attribute works */
     SQLULEN row_array_size = 0;
-    ret = SQLGetStmtAttr(stmt, SQL_ATTR_ROW_ARRAY_SIZE, &row_array_size, sizeof(row_array_size), NULL);
+    ret = SQLGetStmtAttr(stmt, SQL_ATTR_ROW_ARRAY_SIZE, &row_array_size,
+                         sizeof(row_array_size), NULL);
     ASSERT_EQ(ret, SQL_SUCCESS);
     /* The value should be whatever the default is (0 or 1) */
     ASSERT_TRUE(1 == 1); /* Just verify the call succeeded */
@@ -307,7 +349,8 @@ TEST(batch_row_status)
 
     /* Row status array should be NULL initially */
     SQLUSMALLINT *row_status = NULL;
-    ret = SQLGetStmtAttr(stmt, SQL_ATTR_ROW_STATUS_PTR, &row_status, sizeof(row_status), NULL);
+    ret = SQLGetStmtAttr(stmt, SQL_ATTR_ROW_STATUS_PTR, &row_status, sizeof(row_status),
+                         NULL);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);

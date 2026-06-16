@@ -29,7 +29,8 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
     trino_conn_config_defaults(config);
 
     char *str = strdup((const char *)conn_str);
-    if (!str) return SQL_ERROR;
+    if (!str)
+        return SQL_ERROR;
 
     char *saveptr = NULL;
     char *token = strtok_r(str, ";", &saveptr);
@@ -46,8 +47,10 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
         char *value = equals + 1;
 
         /* Trim whitespace */
-        while (*key == ' ') key++;
-        while (*value == ' ') value++;
+        while (*key == ' ')
+            key++;
+        while (*value == ' ')
+            value++;
 
         /* Case-insensitive key comparison */
         if (strcasecmp(key, "Server") == 0 || strcasecmp(key, "Host") == 0) {
@@ -62,20 +65,23 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
             strncpy((char *)config->catalog, value, sizeof(config->catalog) - 1);
         } else if (strcasecmp(key, "Schema") == 0) {
             strncpy((char *)config->schema, value, sizeof(config->schema) - 1);
-        } else if (strcasecmp(key, "Authentication") == 0 || strcasecmp(key, "AuthType") == 0) {
+        } else if (strcasecmp(key, "Authentication") == 0 ||
+                   strcasecmp(key, "AuthType") == 0) {
             strncpy((char *)config->auth_type, value, sizeof(config->auth_type) - 1);
         } else if (strcasecmp(key, "SSL") == 0) {
-            config->ssl_enabled = (strcasecmp(value, "true") == 0 ||
-                                   strcasecmp(value, "yes") == 0 ||
-                                   strcmp(value, "1") == 0);
+            config->ssl_enabled =
+                (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 ||
+                 strcmp(value, "1") == 0);
         } else if (strcasecmp(key, "SSLTrustStoreCertificate") == 0) {
-            strncpy((char *)config->ssl_truststore, value, sizeof(config->ssl_truststore) - 1);
+            strncpy((char *)config->ssl_truststore, value,
+                    sizeof(config->ssl_truststore) - 1);
         } else if (strcasecmp(key, "Source") == 0) {
             strncpy((char *)config->source, value, sizeof(config->source) - 1);
         } else if (strcasecmp(key, "ClientTags") == 0) {
             strncpy((char *)config->client_tags, value, sizeof(config->client_tags) - 1);
         } else if (strcasecmp(key, "SessionProperties") == 0) {
-            strncpy((char *)config->session_properties, value, sizeof(config->session_properties) - 1);
+            strncpy((char *)config->session_properties, value,
+                    sizeof(config->session_properties) - 1);
         } else if (strcasecmp(key, "QueryTimeout") == 0) {
             config->query_timeout = (SQLUINTEGER)atoi(value);
         } else if (strcasecmp(key, "ConnectTimeout") == 0) {
@@ -96,7 +102,8 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
 trino_conn_t *trino_conn_create(trino_env_t *env)
 {
     trino_conn_t *conn = calloc(1, sizeof(*conn));
-    if (!conn) return NULL;
+    if (!conn)
+        return NULL;
 
     conn->type = TRINO_HANDLE_DBC;
     conn->env = env;
@@ -128,7 +135,8 @@ trino_conn_t *trino_conn_create(trino_env_t *env)
 
 void trino_conn_destroy(trino_conn_t *conn)
 {
-    if (!conn) return;
+    if (!conn)
+        return;
 
     if (conn->connected) {
         trino_conn_disconnect(conn);
@@ -168,7 +176,8 @@ void trino_conn_destroy(trino_conn_t *conn)
 
 SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *config)
 {
-    if (!conn || !config) return SQL_ERROR;
+    if (!conn || !config)
+        return SQL_ERROR;
 
     pthread_mutex_lock(&conn->mutex);
 
@@ -186,14 +195,18 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
     conn->server = strdup((char *)config->server);
     conn->port = config->port;
     conn->user = strlen((char *)config->user) > 0 ? strdup((char *)config->user) : NULL;
-    conn->password = strlen((char *)config->password) > 0 ? strdup((char *)config->password) : NULL;
-    conn->catalog = strlen((char *)config->catalog) > 0 ? strdup((char *)config->catalog) : NULL;
-    conn->schema = strlen((char *)config->schema) > 0 ? strdup((char *)config->schema) : NULL;
+    conn->password =
+        strlen((char *)config->password) > 0 ? strdup((char *)config->password) : NULL;
+    conn->catalog =
+        strlen((char *)config->catalog) > 0 ? strdup((char *)config->catalog) : NULL;
+    conn->schema =
+        strlen((char *)config->schema) > 0 ? strdup((char *)config->schema) : NULL;
     conn->source = strdup((char *)config->source);
     conn->auth_type = strdup((char *)config->auth_type);
     conn->ssl_enabled = config->ssl_enabled;
-    conn->ssl_truststore = strlen((char *)config->ssl_truststore) > 0 ?
-        strdup((char *)config->ssl_truststore) : NULL;
+    conn->ssl_truststore = strlen((char *)config->ssl_truststore) > 0
+                               ? strdup((char *)config->ssl_truststore)
+                               : NULL;
 
     conn->connected = true;
 
@@ -203,7 +216,8 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
 
 SQLRETURN trino_conn_disconnect(trino_conn_t *conn)
 {
-    if (!conn) return SQL_ERROR;
+    if (!conn)
+        return SQL_ERROR;
 
     pthread_mutex_lock(&conn->mutex);
     conn->connected = false;
@@ -222,21 +236,18 @@ SQLRETURN trino_conn_disconnect(trino_conn_t *conn)
  * Connection attributes
  * ======================================================================== */
 
-SQLRETURN trino_conn_set_attr(trino_conn_t *conn, SQLINTEGER attr,
-                              SQLPOINTER value, SQLINTEGER str_len)
+SQLRETURN trino_conn_set_attr(trino_conn_t *conn, SQLINTEGER attr, SQLPOINTER value,
+                              SQLINTEGER str_len)
 {
-    if (!conn) return SQL_ERROR;
+    if (!conn)
+        return SQL_ERROR;
 
     pthread_mutex_lock(&conn->mutex);
 
     switch (attr) {
-        case SQL_ATTR_AUTOCOMMIT:
-            conn->autocommit = (*(SQLUINTEGER *)value != 0);
-            break;
+        case SQL_ATTR_AUTOCOMMIT: conn->autocommit = (*(SQLUINTEGER *)value != 0); break;
 
-        case SQL_ATTR_ACCESS_MODE:
-            conn->access_mode = *(SQLUINTEGER *)value;
-            break;
+        case SQL_ATTR_ACCESS_MODE: conn->access_mode = *(SQLUINTEGER *)value; break;
 
         case SQL_ATTR_CURRENT_CATALOG: {
             free(conn->current_catalog);
@@ -248,64 +259,64 @@ SQLRETURN trino_conn_set_attr(trino_conn_t *conn, SQLINTEGER attr,
             break;
         }
 
-        case SQL_ATTR_LOGIN_TIMEOUT:
-            conn->login_timeout = *(SQLUINTEGER *)value;
-            break;
+        case SQL_ATTR_LOGIN_TIMEOUT: conn->login_timeout = *(SQLUINTEGER *)value; break;
 
-        case SQL_ATTR_QUERY_TIMEOUT:
-            conn->query_timeout = *(SQLUINTEGER *)value;
-            break;
+        case SQL_ATTR_QUERY_TIMEOUT: conn->query_timeout = *(SQLUINTEGER *)value; break;
 
-        default:
-            break;
+        default: break;
     }
 
     pthread_mutex_unlock(&conn->mutex);
     return SQL_SUCCESS;
 }
 
-SQLRETURN trino_conn_get_attr(trino_conn_t *conn, SQLINTEGER attr,
-                              SQLPOINTER value, SQLINTEGER buffer_length,
-                              SQLINTEGER *str_len)
+SQLRETURN trino_conn_get_attr(trino_conn_t *conn, SQLINTEGER attr, SQLPOINTER value,
+                              SQLINTEGER buffer_length, SQLINTEGER *str_len)
 {
-    if (!conn || !value) return SQL_ERROR;
+    if (!conn || !value)
+        return SQL_ERROR;
 
     pthread_mutex_lock(&conn->mutex);
 
     switch (attr) {
         case SQL_ATTR_AUTOCOMMIT:
-            *(SQLUINTEGER *)value = conn->autocommit ? SQL_AUTOCOMMIT_ON : SQL_AUTOCOMMIT_OFF;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            *(SQLUINTEGER *)value =
+                conn->autocommit ? SQL_AUTOCOMMIT_ON : SQL_AUTOCOMMIT_OFF;
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_ACCESS_MODE:
             *(SQLUINTEGER *)value = conn->access_mode;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_CURRENT_CATALOG:
             if (conn->current_catalog) {
                 strncpy((char *)value, conn->current_catalog, (size_t)buffer_length - 1);
                 ((char *)value)[buffer_length - 1] = '\0';
-                if (str_len) *str_len = (SQLINTEGER)strlen((char *)value);
+                if (str_len)
+                    *str_len = (SQLINTEGER)strlen((char *)value);
             } else {
-                if (str_len) *str_len = 0;
+                if (str_len)
+                    *str_len = 0;
             }
             break;
 
         case SQL_ATTR_LOGIN_TIMEOUT:
             *(SQLUINTEGER *)value = conn->login_timeout;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
         case SQL_ATTR_QUERY_TIMEOUT:
             *(SQLUINTEGER *)value = conn->query_timeout;
-            if (str_len) *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLUINTEGER);
             break;
 
-        default:
-            pthread_mutex_unlock(&conn->mutex);
-            return SQL_SUCCESS;
+        default: pthread_mutex_unlock(&conn->mutex); return SQL_SUCCESS;
     }
 
     pthread_mutex_unlock(&conn->mutex);
@@ -318,7 +329,8 @@ SQLRETURN trino_conn_get_attr(trino_conn_t *conn, SQLINTEGER attr,
 
 trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
 {
-    if (!conn) return NULL;
+    if (!conn)
+        return NULL;
 
     /* Return the cached client if it has already been created. The client is
      * owned by the connection and reused across statements/pages so that the
@@ -328,18 +340,13 @@ trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
     }
 
     trino_http_client_t *client = trino_http_client_create();
-    if (!client) return NULL;
+    if (!client)
+        return NULL;
 
     SQLRETURN ret = trino_http_client_configure(
-        client,
-        conn->server, conn->port,
-        conn->user, conn->password,
-        conn->auth_type, conn->ssl_enabled,
-        conn->ssl_truststore,
-        conn->client_tags_json,
-        conn->session_properties_json,
-        conn->source
-    );
+        client, conn->server, conn->port, conn->user, conn->password, conn->auth_type,
+        conn->ssl_enabled, conn->ssl_truststore, conn->client_tags_json,
+        conn->session_properties_json, conn->source);
 
     if (ret != SQL_SUCCESS) {
         trino_http_client_destroy(client);
@@ -356,14 +363,15 @@ trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
 
 void trino_conn_register_stmt(trino_conn_t *conn, trino_stmt_t *stmt)
 {
-    if (!conn || !stmt) return;
+    if (!conn || !stmt)
+        return;
 
     pthread_mutex_lock(&conn->mutex);
 
     if (conn->stmt_count >= conn->stmt_capacity) {
         SQLULEN new_cap = conn->stmt_capacity == 0 ? 8 : conn->stmt_capacity * 2;
-        trino_stmt_t **new_arr = realloc(conn->statements,
-            new_cap * sizeof(trino_stmt_t *));
+        trino_stmt_t **new_arr =
+            realloc(conn->statements, new_cap * sizeof(trino_stmt_t *));
         if (new_arr) {
             conn->statements = new_arr;
             conn->stmt_capacity = new_cap;
@@ -379,7 +387,8 @@ void trino_conn_register_stmt(trino_conn_t *conn, trino_stmt_t *stmt)
 
 void trino_conn_unregister_stmt(trino_conn_t *conn, trino_stmt_t *stmt)
 {
-    if (!conn || !stmt) return;
+    if (!conn || !stmt)
+        return;
 
     pthread_mutex_lock(&conn->mutex);
 

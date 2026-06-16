@@ -11,11 +11,51 @@ int tests_run = 0;
 int tests_passed = 0;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
-#define ASSERT_TRUE(expr) do { tests_run++; if (!(expr)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr); return; } tests_passed++; } while(0)
-#define ASSERT_FALSE(expr) do { tests_run++; if ((expr)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr); return; } tests_passed++; } while(0)
-#define ASSERT_NOT_NULL(ptr) do { tests_run++; if (!(ptr)) { printf("FAIL: %s:%d %s is NULL\n", __func__, __LINE__, #ptr); return; } tests_passed++; } while(0)
-#define ASSERT_NULL(ptr) do { tests_run++; if ((ptr)) { printf("FAIL: %s:%d %s is not NULL\n", __func__, __LINE__, #ptr); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_TRUE(expr)                                                                \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(expr)) {                                                                   \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr);                       \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_FALSE(expr)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((expr)) {                                                                    \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr);                       \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NOT_NULL(ptr)                                                             \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(ptr)) {                                                                    \
+            printf("FAIL: %s:%d %s is NULL\n", __func__, __LINE__, #ptr);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NULL(ptr)                                                                 \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((ptr)) {                                                                     \
+            printf("FAIL: %s:%d %s is not NULL\n", __func__, __LINE__, #ptr);            \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* ========================================================================
  * Test: Diagnostics initialization

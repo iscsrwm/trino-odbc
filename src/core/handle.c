@@ -12,9 +12,9 @@
 #define HANDLE_POOL_SIZE 256
 
 typedef struct {
-    void                *ptr;      /* the SQLHANDLE value */
-    trino_handle_type_t  type;
-    bool                 in_use;
+    void *ptr; /* the SQLHANDLE value */
+    trino_handle_type_t type;
+    bool in_use;
 } handle_slot_t;
 
 static handle_slot_t g_pool[HANDLE_POOL_SIZE];
@@ -180,9 +180,7 @@ SQLRETURN SQLAllocHandle(SQLSMALLINT handle_type, SQLHANDLE input_handle,
             return SQL_SUCCESS;
         }
 
-        default:
-            pthread_mutex_unlock(&g_pool_mutex);
-            return SQL_INVALID_HANDLE;
+        default: pthread_mutex_unlock(&g_pool_mutex); return SQL_INVALID_HANDLE;
     }
 }
 
@@ -252,9 +250,7 @@ SQLRETURN SQLFreeHandle(SQLSMALLINT handle_type, SQLHANDLE handle)
             return SQL_SUCCESS;
         }
 
-        default:
-            pthread_mutex_unlock(&g_pool_mutex);
-            return SQL_INVALID_HANDLE;
+        default: pthread_mutex_unlock(&g_pool_mutex); return SQL_INVALID_HANDLE;
     }
 }
 
@@ -264,18 +260,21 @@ SQLRETURN SQLFreeHandle(SQLSMALLINT handle_type, SQLHANDLE handle)
 
 bool trino_env_valid(trino_env_t *env)
 {
-    if (!env) return false;
+    if (!env)
+        return false;
     return env->type == TRINO_HANDLE_ENV;
 }
 
 bool trino_conn_valid(trino_conn_t *conn)
 {
-    if (!conn) return false;
+    if (!conn)
+        return false;
     return conn->type == TRINO_HANDLE_DBC;
 }
 
 bool trino_stmt_valid(trino_stmt_t *stmt)
 {
-    if (!stmt) return false;
+    if (!stmt)
+        return false;
     return stmt->type == TRINO_HANDLE_STMT;
 }

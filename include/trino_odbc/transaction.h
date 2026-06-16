@@ -18,9 +18,9 @@ typedef enum {
 /* Transaction isolation levels */
 typedef enum {
     TRINO_TXN_READ_UNCOMMITTED = 1,
-    TRINO_TXN_READ_COMMITTED   = 2,
-    TRINO_TXN_REPEATABLE_READ  = 3,
-    TRINO_TXN_SERIALIZABLE     = 4
+    TRINO_TXN_READ_COMMITTED = 2,
+    TRINO_TXN_REPEATABLE_READ = 3,
+    TRINO_TXN_SERIALIZABLE = 4
 } trino_txn_isolation_t;
 
 /* Get transaction state */
@@ -39,9 +39,11 @@ SQLRETURN SQLCommit(SQLHDBC connection_handle);
 SQLRETURN SQLRollback(SQLHDBC connection_handle);
 
 /* Set transaction isolation level via ODBC API */
-SQLRETURN SQLSetConnectAttr_txn_isolation(SQLHDBC connection_handle, SQLUINTEGER isolation_level);
+SQLRETURN SQLSetConnectAttr_txn_isolation(SQLHDBC connection_handle,
+                                          SQLUINTEGER isolation_level);
 
 /* Get transaction isolation level */
-SQLRETURN SQLGetConnectAttr_txn_isolation(SQLHDBC connection_handle, SQLUINTEGER *isolation_level);
+SQLRETURN SQLGetConnectAttr_txn_isolation(SQLHDBC connection_handle,
+                                          SQLUINTEGER *isolation_level);
 
 #endif /* TRINO_ODBC_TRANSACTION_H */

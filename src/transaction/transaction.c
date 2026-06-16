@@ -10,15 +10,19 @@
 
 trino_txn_state_t trino_conn_get_txn_state(trino_conn_t *conn)
 {
-    if (!conn) return TRINO_TXN_NONE;
-    if (conn->autocommit) return TRINO_TXN_NONE;
-    if (conn->in_transaction) return TRINO_TXN_ACTIVE;
+    if (!conn)
+        return TRINO_TXN_NONE;
+    if (conn->autocommit)
+        return TRINO_TXN_NONE;
+    if (conn->in_transaction)
+        return TRINO_TXN_ACTIVE;
     return TRINO_TXN_NONE;
 }
 
 SQLRETURN trino_conn_set_txn_isolation(trino_conn_t *conn, SQLUINTEGER isolation_level)
 {
-    if (!conn) return SQL_ERROR;
+    if (!conn)
+        return SQL_ERROR;
 
     pthread_mutex_lock(&conn->mutex);
 
@@ -27,9 +31,7 @@ SQLRETURN trino_conn_set_txn_isolation(trino_conn_t *conn, SQLUINTEGER isolation
         case SQL_TXN_READ_UNCOMMITTED:
         case SQL_TXN_READ_COMMITTED:
         case SQL_TXN_REPEATABLE_READ:
-        case SQL_TXN_SERIALIZABLE:
-            conn->txn_isolation = isolation_level;
-            break;
+        case SQL_TXN_SERIALIZABLE: conn->txn_isolation = isolation_level; break;
         default:
             /* Default to READ_COMMITTED for Trino */
             conn->txn_isolation = SQL_TXN_READ_COMMITTED;
@@ -42,7 +44,8 @@ SQLRETURN trino_conn_set_txn_isolation(trino_conn_t *conn, SQLUINTEGER isolation
 
 SQLRETURN trino_conn_begin_txn(trino_conn_t *conn)
 {
-    if (!conn || !conn->connected) return SQL_ERROR;
+    if (!conn || !conn->connected)
+        return SQL_ERROR;
 
     pthread_mutex_lock(&conn->mutex);
 
@@ -60,10 +63,12 @@ SQLRETURN trino_conn_begin_txn(trino_conn_t *conn)
 
 SQLRETURN SQLCommit(SQLHDBC connection_handle)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     pthread_mutex_lock(&conn->mutex);
 
@@ -90,10 +95,12 @@ SQLRETURN SQLCommit(SQLHDBC connection_handle)
 
 SQLRETURN SQLRollback(SQLHDBC connection_handle)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     pthread_mutex_lock(&conn->mutex);
 
@@ -117,22 +124,28 @@ SQLRETURN SQLRollback(SQLHDBC connection_handle)
  * Transaction isolation level functions
  * ======================================================================== */
 
-SQLRETURN SQLSetConnectAttr_txn_isolation(SQLHDBC connection_handle, SQLUINTEGER isolation_level)
+SQLRETURN SQLSetConnectAttr_txn_isolation(SQLHDBC connection_handle,
+                                          SQLUINTEGER isolation_level)
 {
-    if (!connection_handle) return SQL_INVALID_HANDLE;
+    if (!connection_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     return trino_conn_set_txn_isolation(conn, isolation_level);
 }
 
-SQLRETURN SQLGetConnectAttr_txn_isolation(SQLHDBC connection_handle, SQLUINTEGER *isolation_level)
+SQLRETURN SQLGetConnectAttr_txn_isolation(SQLHDBC connection_handle,
+                                          SQLUINTEGER *isolation_level)
 {
-    if (!connection_handle || !isolation_level) return SQL_INVALID_HANDLE;
+    if (!connection_handle || !isolation_level)
+        return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn)) return SQL_INVALID_HANDLE;
+    if (!trino_conn_valid(conn))
+        return SQL_INVALID_HANDLE;
 
     pthread_mutex_lock(&conn->mutex);
     *isolation_level = conn->txn_isolation;

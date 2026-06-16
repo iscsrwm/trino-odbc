@@ -11,7 +11,8 @@
  * Helper: build pattern string for LIKE clause
  * ======================================================================== */
 
-static void build_pattern(const SQLCHAR *pattern, SQLSMALLINT pattern_len, char *out, size_t out_size)
+static void build_pattern(const SQLCHAR *pattern, SQLSMALLINT pattern_len, char *out,
+                          size_t out_size)
 {
     /* Resolve null-terminated strings to their actual length. */
     if (pattern && pattern_len == SQL_NTS) {
@@ -60,19 +61,21 @@ static const char *get_catalog_or_default(trino_conn_t *conn)
  * Returns: TABLE_CAT, TABLE_SCHEM, TABLE_NAME, TABLE_TYPE, REMARKS
  * ======================================================================== */
 
-SQLRETURN SQLTables(SQLHSTMT statement_handle,
-                    SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
-                    SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
-                    SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length,
-                    SQLCHAR *types, SQLSMALLINT types_length)
+SQLRETURN SQLTables(SQLHSTMT statement_handle, SQLCHAR *catalog_name,
+                    SQLSMALLINT catalog_name_length, SQLCHAR *schema_pattern,
+                    SQLSMALLINT schema_pattern_length, SQLCHAR *table_pattern,
+                    SQLSMALLINT table_pattern_length, SQLCHAR *types,
+                    SQLSMALLINT types_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -104,8 +107,10 @@ SQLRETURN SQLTables(SQLHSTMT statement_handle,
             }
             /* Find end of this type */
             size_t start = t;
-            while (t < types_len && types[t] != ',') t++;
-            if (!first) types_pat[i++] = ',';
+            while (t < types_len && types[t] != ',')
+                t++;
+            if (!first)
+                types_pat[i++] = ',';
             first = false;
             types_pat[i++] = '\'';
             size_t j = start;
@@ -121,15 +126,15 @@ SQLRETURN SQLTables(SQLHSTMT statement_handle,
     /* Construct SQL query against information_schema.tables */
     const char *catalog = get_catalog_or_default(stmt->conn);
     snprintf(sql, sizeof(sql),
-        "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
-        "TABLE_NAME, TABLE_TYPE, '' AS REMARKS "
-        "FROM %s.information_schema.tables "
-        "WHERE TABLE_CATALOG LIKE %s "
-        "AND TABLE_SCHEMA LIKE %s "
-        "AND TABLE_NAME LIKE %s "
-        "AND TABLE_TYPE IN %s "
-        "ORDER BY TABLE_TYPE, TABLE_SCHEM, TABLE_NAME",
-        catalog, cat_pat, schema_pat, table_pat, types_pat);
+             "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
+             "TABLE_NAME, TABLE_TYPE, '' AS REMARKS "
+             "FROM %s.information_schema.tables "
+             "WHERE TABLE_CATALOG LIKE %s "
+             "AND TABLE_SCHEMA LIKE %s "
+             "AND TABLE_NAME LIKE %s "
+             "AND TABLE_TYPE IN %s "
+             "ORDER BY TABLE_TYPE, TABLE_SCHEM, TABLE_NAME",
+             catalog, cat_pat, schema_pat, table_pat, types_pat);
 
     return SQLExecDirect(statement_handle, (SQLCHAR *)sql, SQL_NTS);
 }
@@ -147,19 +152,21 @@ SQLRETURN SQLTables(SQLHSTMT statement_handle,
  *          COLLATION_SCHEMA, COLLATION_NAME
  * ======================================================================== */
 
-SQLRETURN SQLColumns(SQLHSTMT statement_handle,
-                     SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
-                     SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
-                     SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length,
-                     SQLCHAR *column_pattern, SQLSMALLINT column_pattern_length)
+SQLRETURN SQLColumns(SQLHSTMT statement_handle, SQLCHAR *catalog_name,
+                     SQLSMALLINT catalog_name_length, SQLCHAR *schema_pattern,
+                     SQLSMALLINT schema_pattern_length, SQLCHAR *table_pattern,
+                     SQLSMALLINT table_pattern_length, SQLCHAR *column_pattern,
+                     SQLSMALLINT column_pattern_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -173,45 +180,45 @@ SQLRETURN SQLColumns(SQLHSTMT statement_handle,
 
     const char *catalog = get_catalog_or_default(stmt->conn);
     snprintf(sql, sizeof(sql),
-        "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
-        "TABLE_NAME, COLUMN_NAME, DATA_TYPE AS TYPE_NAME, "
-        "CASE DATA_TYPE "
-        "  WHEN 'varchar' THEN 12 WHEN 'char' THEN 1 "
-        "  WHEN 'smallint' THEN 5 WHEN 'integer' THEN 4 WHEN 'bigint' THEN -5 "
-        "  WHEN 'real' THEN 6 WHEN 'double' THEN 8 "
-        "  WHEN 'boolean' THEN -7 WHEN 'varbinary' THEN -2 "
-        "  WHEN 'date' THEN 91 WHEN 'time' THEN 92 WHEN 'timestamp' THEN 93 "
-        "  WHEN 'json' THEN -1 WHEN 'array' THEN 2003 WHEN 'map' THEN 2004 "
-        "  ELSE 11 END AS DATA_TYPE, "
-        "COALESCE(CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, 0) AS COLUMN_SIZE, "
-        "0 AS BUFFER_LENGTH, "
-        "COALESCE(NUMERIC_SCALE, 0) AS DECIMAL_DIGITS, "
-        "10 AS NUM_PREC_RADIX, "
-        "CASE WHEN IS_NULLABLE = 'YES' THEN 1 ELSE 0 END AS NULLABLE, "
-        "'' AS REMARKS, NULL AS COLUMN_DEF, "
-        "CASE DATA_TYPE "
-        "  WHEN 'varchar' THEN 12 WHEN 'char' THEN 1 "
-        "  WHEN 'smallint' THEN 5 WHEN 'integer' THEN 4 WHEN 'bigint' THEN -5 "
-        "  WHEN 'real' THEN 6 WHEN 'double' THEN 8 "
-        "  WHEN 'boolean' THEN -7 WHEN 'varbinary' THEN -2 "
-        "  WHEN 'date' THEN 91 WHEN 'time' THEN 92 WHEN 'timestamp' THEN 93 "
-        "  WHEN 'json' THEN -1 WHEN 'array' THEN 2003 WHEN 'map' THEN 2004 "
-        "  ELSE 11 END AS SQL_DATA_TYPE, "
-        "NULL AS SQL_DATETIME_SUB, "
-        "CHARACTER_MAXIMUM_LENGTH AS CHAR_OCTET_LENGTH, "
-        "ORDINAL_POSITION, IS_NULLABLE, "
-        "NULL AS SCOPE_CATALOG, NULL AS SCOPE_SCHEMA, NULL AS SCOPE_TABLE, "
-        "NULL AS DATA_TYPE, NULL AS DATETIME_PRECISION, "
-        "NULL AS CHARACTER_SET_CATALOG, NULL AS CHARACTER_SET_SCHEMA, "
-        "NULL AS CHARACTER_SET_NAME, NULL AS COLLATION_CATALOG, "
-        "NULL AS COLLATION_SCHEMA, NULL AS COLLATION_NAME "
-        "FROM %s.information_schema.columns "
-        "WHERE TABLE_CATALOG LIKE %s "
-        "AND TABLE_SCHEMA LIKE %s "
-        "AND TABLE_NAME LIKE %s "
-        "AND COLUMN_NAME LIKE %s "
-        "ORDER BY TABLE_CAT, TABLE_SCHEM, TABLE_NAME, ORDINAL_POSITION",
-        catalog, cat_pat, schema_pat, table_pat, col_pat);
+             "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
+             "TABLE_NAME, COLUMN_NAME, DATA_TYPE AS TYPE_NAME, "
+             "CASE DATA_TYPE "
+             "  WHEN 'varchar' THEN 12 WHEN 'char' THEN 1 "
+             "  WHEN 'smallint' THEN 5 WHEN 'integer' THEN 4 WHEN 'bigint' THEN -5 "
+             "  WHEN 'real' THEN 6 WHEN 'double' THEN 8 "
+             "  WHEN 'boolean' THEN -7 WHEN 'varbinary' THEN -2 "
+             "  WHEN 'date' THEN 91 WHEN 'time' THEN 92 WHEN 'timestamp' THEN 93 "
+             "  WHEN 'json' THEN -1 WHEN 'array' THEN 2003 WHEN 'map' THEN 2004 "
+             "  ELSE 11 END AS DATA_TYPE, "
+             "COALESCE(CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, 0) AS COLUMN_SIZE, "
+             "0 AS BUFFER_LENGTH, "
+             "COALESCE(NUMERIC_SCALE, 0) AS DECIMAL_DIGITS, "
+             "10 AS NUM_PREC_RADIX, "
+             "CASE WHEN IS_NULLABLE = 'YES' THEN 1 ELSE 0 END AS NULLABLE, "
+             "'' AS REMARKS, NULL AS COLUMN_DEF, "
+             "CASE DATA_TYPE "
+             "  WHEN 'varchar' THEN 12 WHEN 'char' THEN 1 "
+             "  WHEN 'smallint' THEN 5 WHEN 'integer' THEN 4 WHEN 'bigint' THEN -5 "
+             "  WHEN 'real' THEN 6 WHEN 'double' THEN 8 "
+             "  WHEN 'boolean' THEN -7 WHEN 'varbinary' THEN -2 "
+             "  WHEN 'date' THEN 91 WHEN 'time' THEN 92 WHEN 'timestamp' THEN 93 "
+             "  WHEN 'json' THEN -1 WHEN 'array' THEN 2003 WHEN 'map' THEN 2004 "
+             "  ELSE 11 END AS SQL_DATA_TYPE, "
+             "NULL AS SQL_DATETIME_SUB, "
+             "CHARACTER_MAXIMUM_LENGTH AS CHAR_OCTET_LENGTH, "
+             "ORDINAL_POSITION, IS_NULLABLE, "
+             "NULL AS SCOPE_CATALOG, NULL AS SCOPE_SCHEMA, NULL AS SCOPE_TABLE, "
+             "NULL AS DATA_TYPE, NULL AS DATETIME_PRECISION, "
+             "NULL AS CHARACTER_SET_CATALOG, NULL AS CHARACTER_SET_SCHEMA, "
+             "NULL AS CHARACTER_SET_NAME, NULL AS COLLATION_CATALOG, "
+             "NULL AS COLLATION_SCHEMA, NULL AS COLLATION_NAME "
+             "FROM %s.information_schema.columns "
+             "WHERE TABLE_CATALOG LIKE %s "
+             "AND TABLE_SCHEMA LIKE %s "
+             "AND TABLE_NAME LIKE %s "
+             "AND COLUMN_NAME LIKE %s "
+             "ORDER BY TABLE_CAT, TABLE_SCHEM, TABLE_NAME, ORDINAL_POSITION",
+             catalog, cat_pat, schema_pat, table_pat, col_pat);
 
     return SQLExecDirect(statement_handle, (SQLCHAR *)sql, SQL_NTS);
 }
@@ -222,18 +229,20 @@ SQLRETURN SQLColumns(SQLHSTMT statement_handle,
  * Returns: TABLE_CAT, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, KEY_SEQ, PK_NAME
  * ======================================================================== */
 
-SQLRETURN SQLPrimaryKeys(SQLHSTMT statement_handle,
-                         SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
-                         SQLCHAR *schema_name, SQLSMALLINT schema_name_length,
-                         SQLCHAR *table_name, SQLSMALLINT table_name_length)
+SQLRETURN SQLPrimaryKeys(SQLHSTMT statement_handle, SQLCHAR *catalog_name,
+                         SQLSMALLINT catalog_name_length, SQLCHAR *schema_name,
+                         SQLSMALLINT schema_name_length, SQLCHAR *table_name,
+                         SQLSMALLINT table_name_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -246,15 +255,15 @@ SQLRETURN SQLPrimaryKeys(SQLHSTMT statement_handle,
 
     const char *catalog = get_catalog_or_default(stmt->conn);
     snprintf(sql, sizeof(sql),
-        "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
-        "TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION AS KEY_SEQ, "
-        "CONSTRAINT_NAME AS PK_NAME "
-        "FROM %s.information_schema.key_column_usage "
-        "WHERE TABLE_CATALOG LIKE %s "
-        "AND TABLE_SCHEMA LIKE %s "
-        "AND TABLE_NAME LIKE %s "
-        "ORDER BY TABLE_CAT, TABLE_SCHEM, TABLE_NAME, KEY_SEQ",
-        catalog, cat_pat, schema_pat, table_pat);
+             "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
+             "TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION AS KEY_SEQ, "
+             "CONSTRAINT_NAME AS PK_NAME "
+             "FROM %s.information_schema.key_column_usage "
+             "WHERE TABLE_CATALOG LIKE %s "
+             "AND TABLE_SCHEMA LIKE %s "
+             "AND TABLE_NAME LIKE %s "
+             "ORDER BY TABLE_CAT, TABLE_SCHEM, TABLE_NAME, KEY_SEQ",
+             catalog, cat_pat, schema_pat, table_pat);
 
     return SQLExecDirect(statement_handle, (SQLCHAR *)sql, SQL_NTS);
 }
@@ -267,21 +276,23 @@ SQLRETURN SQLPrimaryKeys(SQLHSTMT statement_handle,
  *          KEY_SEQ, UPDATE_RULE, DELETE_RULE, FK_NAME, PK_NAME, DEFERRABILITY
  * ======================================================================== */
 
-SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle,
-                         SQLCHAR *pk_catalog, SQLSMALLINT pk_catalog_length,
-                         SQLCHAR *pk_schema, SQLSMALLINT pk_schema_length,
-                         SQLCHAR *pk_table, SQLSMALLINT pk_table_length,
-                         SQLCHAR *fk_catalog, SQLSMALLINT fk_catalog_length,
-                         SQLCHAR *fk_schema, SQLSMALLINT fk_schema_length,
-                         SQLCHAR *fk_table, SQLSMALLINT fk_table_length)
+SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle, SQLCHAR *pk_catalog,
+                         SQLSMALLINT pk_catalog_length, SQLCHAR *pk_schema,
+                         SQLSMALLINT pk_schema_length, SQLCHAR *pk_table,
+                         SQLSMALLINT pk_table_length, SQLCHAR *fk_catalog,
+                         SQLSMALLINT fk_catalog_length, SQLCHAR *fk_schema,
+                         SQLSMALLINT fk_schema_length, SQLCHAR *fk_table,
+                         SQLSMALLINT fk_table_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -297,7 +308,8 @@ SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle,
     build_pattern(fk_table, fk_table_length, fk_table_pat, sizeof(fk_table_pat));
 
     const char *catalog = get_catalog_or_default(stmt->conn);
-    snprintf(sql, sizeof(sql),
+    snprintf(
+        sql, sizeof(sql),
         "SELECT kcu.TABLE_CATALOG AS PKTABLE_CAT, kcu.TABLE_SCHEMA AS PKTABLE_SCHEM, "
         "kcu.TABLE_NAME AS PKTABLE_NAME, kcu.COLUMN_NAME AS PKCOLUMN_NAME, "
         "ccu.TABLE_CATALOG AS FKTABLE_CAT, ccu.TABLE_SCHEMA AS FKTABLE_SCHEM, "
@@ -324,8 +336,7 @@ SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle,
         "AND ccu.TABLE_SCHEMA LIKE %s "
         "AND ccu.TABLE_NAME LIKE %s "
         "ORDER BY PKTABLE_CAT, PKTABLE_SCHEM, PKTABLE_NAME, KEY_SEQ",
-        catalog, catalog, catalog, catalog,
-        pk_cat_pat, pk_schema_pat, pk_table_pat,
+        catalog, catalog, catalog, catalog, pk_cat_pat, pk_schema_pat, pk_table_pat,
         fk_cat_pat, fk_schema_pat, fk_table_pat);
 
     return SQLExecDirect(statement_handle, (SQLCHAR *)sql, SQL_NTS);
@@ -335,18 +346,20 @@ SQLRETURN SQLForeignKeys(SQLHSTMT statement_handle,
  * SQLGetTablePrivileges
  * ======================================================================== */
 
-SQLRETURN SQLTablePrivileges(SQLHSTMT statement_handle,
-                             SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
-                             SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
-                             SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length)
+SQLRETURN SQLTablePrivileges(SQLHSTMT statement_handle, SQLCHAR *catalog_name,
+                             SQLSMALLINT catalog_name_length, SQLCHAR *schema_pattern,
+                             SQLSMALLINT schema_pattern_length, SQLCHAR *table_pattern,
+                             SQLSMALLINT table_pattern_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -358,7 +371,8 @@ SQLRETURN SQLTablePrivileges(SQLHSTMT statement_handle,
     build_pattern(table_pattern, table_pattern_length, table_pat, sizeof(table_pat));
 
     const char *catalog = get_catalog_or_default(stmt->conn);
-    snprintf(sql, sizeof(sql),
+    snprintf(
+        sql, sizeof(sql),
         "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
         "TABLE_NAME, GRANTEE, 'SELECT' AS PRIVILEGE, 'YES' AS IS_GRANTABLE "
         "FROM %s.information_schema.tables "
@@ -377,10 +391,8 @@ SQLRETURN SQLTablePrivileges(SQLHSTMT statement_handle,
         "SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, GRANTEE, 'DELETE', 'YES' "
         "FROM %s.information_schema.tables "
         "WHERE TABLE_CATALOG LIKE %s AND TABLE_SCHEMA LIKE %s AND TABLE_NAME LIKE %s",
-        catalog, cat_pat, schema_pat, table_pat,
-        catalog, cat_pat, schema_pat, table_pat,
-        catalog, cat_pat, schema_pat, table_pat,
-        catalog, cat_pat, schema_pat, table_pat);
+        catalog, cat_pat, schema_pat, table_pat, catalog, cat_pat, schema_pat, table_pat,
+        catalog, cat_pat, schema_pat, table_pat, catalog, cat_pat, schema_pat, table_pat);
 
     return SQLExecDirect(statement_handle, (SQLCHAR *)sql, SQL_NTS);
 }
@@ -389,19 +401,21 @@ SQLRETURN SQLTablePrivileges(SQLHSTMT statement_handle,
  * SQLGetColumnPrivileges
  * ======================================================================== */
 
-SQLRETURN SQLColumnPrivileges(SQLHSTMT statement_handle,
-                              SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
-                              SQLCHAR *schema_pattern, SQLSMALLINT schema_pattern_length,
-                              SQLCHAR *table_pattern, SQLSMALLINT table_pattern_length,
-                              SQLCHAR *column_pattern, SQLSMALLINT column_pattern_length)
+SQLRETURN SQLColumnPrivileges(SQLHSTMT statement_handle, SQLCHAR *catalog_name,
+                              SQLSMALLINT catalog_name_length, SQLCHAR *schema_pattern,
+                              SQLSMALLINT schema_pattern_length, SQLCHAR *table_pattern,
+                              SQLSMALLINT table_pattern_length, SQLCHAR *column_pattern,
+                              SQLSMALLINT column_pattern_length)
 {
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -414,7 +428,8 @@ SQLRETURN SQLColumnPrivileges(SQLHSTMT statement_handle,
     build_pattern(column_pattern, column_pattern_length, col_pat, sizeof(col_pat));
 
     const char *catalog = get_catalog_or_default(stmt->conn);
-    snprintf(sql, sizeof(sql),
+    snprintf(
+        sql, sizeof(sql),
         "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
         "TABLE_NAME, COLUMN_NAME, GRANTEE, 'SELECT' AS PRIVILEGE, 'YES' AS IS_GRANTABLE "
         "FROM %s.information_schema.columns "
@@ -440,13 +455,15 @@ SQLRETURN SQLSpecialColumns(SQLHSTMT statement_handle, SQLUSMALLINT identifier_t
     (void)identifier_scope;
     (void)nullable;
 
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -460,8 +477,10 @@ SQLRETURN SQLSpecialColumns(SQLHSTMT statement_handle, SQLUSMALLINT identifier_t
     const char *catalog = get_catalog_or_default(stmt->conn);
 
     if (identifier_type == SQL_BEST_ROWID || identifier_type == SQL_ROWVER) {
-        /* Trino doesn't have native ROWID, but we can return a unique column if available */
-        snprintf(sql, sizeof(sql),
+        /* Trino doesn't have native ROWID, but we can return a unique column if available
+         */
+        snprintf(
+            sql, sizeof(sql),
             "SELECT NULL AS SCOPE_CATALOG, NULL AS SCOPE_SCHEMA, "
             "NULL AS SCOPE_TABLE, COLUMN_NAME AS COLUMN_NAME, "
             "DATA_TYPE AS DATA_TYPE, NULL AS TYPE_NAME, "
@@ -476,7 +495,8 @@ SQLRETURN SQLSpecialColumns(SQLHSTMT statement_handle, SQLUSMALLINT identifier_t
             catalog, cat_pat, schema_pat, table_pat);
     } else {
         /* SQL_UNIQUE */
-        snprintf(sql, sizeof(sql),
+        snprintf(
+            sql, sizeof(sql),
             "SELECT NULL AS SCOPE_CATALOG, NULL AS SCOPE_SCHEMA, "
             "NULL AS SCOPE_TABLE, COLUMN_NAME AS COLUMN_NAME, "
             "DATA_TYPE AS DATA_TYPE, NULL AS TYPE_NAME, "
@@ -497,22 +517,24 @@ SQLRETURN SQLSpecialColumns(SQLHSTMT statement_handle, SQLUSMALLINT identifier_t
  * SQLStatistics
  * ======================================================================== */
 
-SQLRETURN SQLStatistics(SQLHSTMT statement_handle,
-                        SQLCHAR *catalog_name, SQLSMALLINT catalog_name_length,
-                        SQLCHAR *schema_name, SQLSMALLINT schema_name_length,
-                        SQLCHAR *table_name, SQLSMALLINT table_name_length,
-                        SQLUSMALLINT unique, SQLUSMALLINT reserved)
+SQLRETURN SQLStatistics(SQLHSTMT statement_handle, SQLCHAR *catalog_name,
+                        SQLSMALLINT catalog_name_length, SQLCHAR *schema_name,
+                        SQLSMALLINT schema_name_length, SQLCHAR *table_name,
+                        SQLSMALLINT table_name_length, SQLUSMALLINT unique,
+                        SQLUSMALLINT reserved)
 {
     (void)unique;
     (void)reserved;
 
-    if (!statement_handle) return SQL_INVALID_HANDLE;
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) return SQL_INVALID_HANDLE;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
     if (!stmt->conn || !stmt->conn->connected) {
-        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN,
-                             0, "No active connection");
+        trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
+                             "No active connection");
         return SQL_ERROR;
     }
 
@@ -525,20 +547,20 @@ SQLRETURN SQLStatistics(SQLHSTMT statement_handle,
 
     const char *catalog = get_catalog_or_default(stmt->conn);
     snprintf(sql, sizeof(sql),
-        "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
-        "TABLE_NAME, "
-        "CASE INDEX_TYPE WHEN 'PRIMARY KEY' THEN 0 ELSE 1 END AS NON_UNIQUE, "
-        "NULL AS INDEX_QUALIFIER, INDEX_NAME AS INDEX_NAME, "
-        "CASE INDEX_TYPE WHEN 'PRIMARY KEY' THEN 1 ELSE 2 END AS TYPE, "
-        "ORDINAL_POSITION AS ORDINAL_POSITION, "
-        "COLUMN_NAME AS COLUMN_NAME, 'A' AS COLLATION, "
-        "0 AS CARDINALITY, 0 AS PAGES, NULL AS FILTER_CONDITION "
-        "FROM %s.information_schema.statistics "
-        "WHERE TABLE_CATALOG LIKE %s "
-        "AND TABLE_SCHEMA LIKE %s "
-        "AND TABLE_NAME LIKE %s "
-        "ORDER BY NON_UNIQUE, INDEX_NAME, ORDINAL_POSITION",
-        catalog, cat_pat, schema_pat, table_pat);
+             "SELECT TABLE_CATALOG AS TABLE_CAT, TABLE_SCHEMA AS TABLE_SCHEM, "
+             "TABLE_NAME, "
+             "CASE INDEX_TYPE WHEN 'PRIMARY KEY' THEN 0 ELSE 1 END AS NON_UNIQUE, "
+             "NULL AS INDEX_QUALIFIER, INDEX_NAME AS INDEX_NAME, "
+             "CASE INDEX_TYPE WHEN 'PRIMARY KEY' THEN 1 ELSE 2 END AS TYPE, "
+             "ORDINAL_POSITION AS ORDINAL_POSITION, "
+             "COLUMN_NAME AS COLUMN_NAME, 'A' AS COLLATION, "
+             "0 AS CARDINALITY, 0 AS PAGES, NULL AS FILTER_CONDITION "
+             "FROM %s.information_schema.statistics "
+             "WHERE TABLE_CATALOG LIKE %s "
+             "AND TABLE_SCHEMA LIKE %s "
+             "AND TABLE_NAME LIKE %s "
+             "ORDER BY NON_UNIQUE, INDEX_NAME, ORDINAL_POSITION",
+             catalog, cat_pat, schema_pat, table_pat);
 
     return SQLExecDirect(statement_handle, (SQLCHAR *)sql, SQL_NTS);
 }
@@ -549,14 +571,16 @@ SQLRETURN SQLStatistics(SQLHSTMT statement_handle,
 
 SQLRETURN SQLDataSources(SQLHENV environment_handle, SQLUSMALLINT direction,
                          SQLCHAR *server_name, SQLSMALLINT buffer_length,
-                         SQLSMALLINT *name_length_ptr,
-                         SQLCHAR *description, SQLSMALLINT description_buffer_length,
+                         SQLSMALLINT *name_length_ptr, SQLCHAR *description,
+                         SQLSMALLINT description_buffer_length,
                          SQLSMALLINT *description_length_ptr)
 {
-    if (!environment_handle) return SQL_INVALID_HANDLE;
+    if (!environment_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_env_t *env = (trino_env_t *)environment_handle;
-    if (!trino_env_valid(env)) return SQL_INVALID_HANDLE;
+    if (!trino_env_valid(env))
+        return SQL_INVALID_HANDLE;
 
     /* Enumerating data sources is the driver manager's responsibility; a
      * driver normally returns SQL_NO_DATA. Only report on the first fetch. */
@@ -570,13 +594,16 @@ SQLRETURN SQLDataSources(SQLHENV environment_handle, SQLUSMALLINT direction,
     if (server_name && buffer_length > 0) {
         strncpy((char *)server_name, "Trino", (size_t)buffer_length - 1);
         ((char *)server_name)[buffer_length - 1] = '\0';
-        if (name_length_ptr) *name_length_ptr = (SQLSMALLINT)strlen((char *)server_name);
+        if (name_length_ptr)
+            *name_length_ptr = (SQLSMALLINT)strlen((char *)server_name);
     }
 
     if (description && description_buffer_length > 0) {
-        strncpy((char *)description, "Trino ODBC Driver", (size_t)description_buffer_length - 1);
+        strncpy((char *)description, "Trino ODBC Driver",
+                (size_t)description_buffer_length - 1);
         ((char *)description)[description_buffer_length - 1] = '\0';
-        if (description_length_ptr) *description_length_ptr = (SQLSMALLINT)strlen((char *)description);
+        if (description_length_ptr)
+            *description_length_ptr = (SQLSMALLINT)strlen((char *)description);
     }
 
     return SQL_SUCCESS;
@@ -584,28 +611,33 @@ SQLRETURN SQLDataSources(SQLHENV environment_handle, SQLUSMALLINT direction,
 
 SQLRETURN SQLDrivers(SQLHENV environment_handle, SQLUSMALLINT driver_completion,
                      SQLCHAR *driver_data, SQLSMALLINT buffer_length,
-                     SQLSMALLINT *str_length_ptr,
-                     SQLCHAR *driver_attributes, SQLSMALLINT attributes_buffer_length,
+                     SQLSMALLINT *str_length_ptr, SQLCHAR *driver_attributes,
+                     SQLSMALLINT attributes_buffer_length,
                      SQLSMALLINT *attributes_length_ptr)
 {
     (void)driver_completion;
 
-    if (!environment_handle) return SQL_INVALID_HANDLE;
+    if (!environment_handle)
+        return SQL_INVALID_HANDLE;
 
     trino_env_t *env = (trino_env_t *)environment_handle;
-    if (!trino_env_valid(env)) return SQL_INVALID_HANDLE;
+    if (!trino_env_valid(env))
+        return SQL_INVALID_HANDLE;
 
     if (driver_data && buffer_length > 0) {
         strncpy((char *)driver_data, "Trino ODBC Driver", (size_t)buffer_length - 1);
         ((char *)driver_data)[buffer_length - 1] = '\0';
-        if (str_length_ptr) *str_length_ptr = (SQLSMALLINT)strlen((char *)driver_data);
+        if (str_length_ptr)
+            *str_length_ptr = (SQLSMALLINT)strlen((char *)driver_data);
     }
 
     if (driver_attributes && attributes_buffer_length > 0) {
-        strncpy((char *)driver_attributes, "APILevel=2;ConnectFunctions=YYY;DriverODBCVer=03.80",
+        strncpy((char *)driver_attributes,
+                "APILevel=2;ConnectFunctions=YYY;DriverODBCVer=03.80",
                 (size_t)attributes_buffer_length - 1);
         ((char *)driver_attributes)[attributes_buffer_length - 1] = '\0';
-        if (attributes_length_ptr) *attributes_length_ptr = (SQLSMALLINT)strlen((char *)driver_attributes);
+        if (attributes_length_ptr)
+            *attributes_length_ptr = (SQLSMALLINT)strlen((char *)driver_attributes);
     }
 
     return SQL_SUCCESS;

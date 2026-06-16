@@ -13,11 +13,51 @@ extern int tests_run;
 extern int tests_passed;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
-#define ASSERT_TRUE(expr) do { tests_run++; if (!(expr)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr); return; } tests_passed++; } while(0)
-#define ASSERT_FALSE(expr) do { tests_run++; if ((expr)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr); return; } tests_passed++; } while(0)
-#define ASSERT_NOT_NULL(ptr) do { tests_run++; if (!(ptr)) { printf("FAIL: %s:%d %s is NULL\n", __func__, __LINE__, #ptr); return; } tests_passed++; } while(0)
-#define ASSERT_NULL(ptr) do { tests_run++; if ((ptr)) { printf("FAIL: %s:%d %s is not NULL\n", __func__, __LINE__, #ptr); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_TRUE(expr)                                                                \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(expr)) {                                                                   \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr);                       \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_FALSE(expr)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((expr)) {                                                                    \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #expr);                       \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NOT_NULL(ptr)                                                             \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(ptr)) {                                                                    \
+            printf("FAIL: %s:%d %s is NULL\n", __func__, __LINE__, #ptr);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NULL(ptr)                                                                 \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((ptr)) {                                                                     \
+            printf("FAIL: %s:%d %s is not NULL\n", __func__, __LINE__, #ptr);            \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* Forward declarations */
 void test_catalog_invalid_handle(void);
@@ -90,26 +130,25 @@ TEST(catalog_no_connection)
  * ======================================================================== */
 TEST(write_op_detection_insert)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "INSERT INTO users (name) VALUES ('t')"));
+    ASSERT_TRUE(
+        trino_sql_is_write_op((const SQLCHAR *)"INSERT INTO users (name) VALUES ('t')"));
 }
 
 TEST(write_op_detection_update)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "UPDATE users SET name = 't' WHERE id = 1"));
+    ASSERT_TRUE(trino_sql_is_write_op(
+        (const SQLCHAR *)"UPDATE users SET name = 't' WHERE id = 1"));
 }
 
 TEST(write_op_detection_delete)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "DELETE FROM users WHERE id = 1"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"DELETE FROM users WHERE id = 1"));
 }
 
 TEST(write_op_detection_create)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "CREATE TABLE test (id INTEGER, name VARCHAR)"));
+    ASSERT_TRUE(trino_sql_is_write_op(
+        (const SQLCHAR *)"CREATE TABLE test (id INTEGER, name VARCHAR)"));
 }
 
 TEST(write_op_detection_drop)
@@ -119,8 +158,8 @@ TEST(write_op_detection_drop)
 
 TEST(write_op_detection_alter)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "ALTER TABLE test ADD COLUMN c VARCHAR"));
+    ASSERT_TRUE(
+        trino_sql_is_write_op((const SQLCHAR *)"ALTER TABLE test ADD COLUMN c VARCHAR"));
 }
 
 TEST(write_op_detection_truncate)
@@ -130,14 +169,12 @@ TEST(write_op_detection_truncate)
 
 TEST(write_op_detection_grant)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "GRANT SELECT ON test TO usr"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"GRANT SELECT ON test TO usr"));
 }
 
 TEST(write_op_detection_revoke)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "REVOKE SELECT ON test FROM usr"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"REVOKE SELECT ON test FROM usr"));
 }
 
 TEST(write_op_detection_select_not_write)
@@ -148,36 +185,32 @@ TEST(write_op_detection_select_not_write)
 /* Lowercase keywords must still be detected. */
 TEST(write_op_detection_lowercase)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "insert into t values (1)"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"insert into t values (1)"));
     ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"select 1"));
 }
 
 /* Leading whitespace and comments must be skipped before classifying. */
 TEST(write_op_detection_leading_comments)
 {
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "  -- audit insert\n  INSERT INTO t VALUES (1)"));
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "/* block */ UPDATE t SET x = 1"));
-    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)
-        "/* not a write */ SELECT 1"));
+    ASSERT_TRUE(trino_sql_is_write_op(
+        (const SQLCHAR *)"  -- audit insert\n  INSERT INTO t VALUES (1)"));
+    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)"/* block */ UPDATE t SET x = 1"));
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"/* not a write */ SELECT 1"));
 }
 
 /* A CTE preceding the operative statement determines the classification. */
 TEST(write_op_detection_cte)
 {
-    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)
-        "WITH a AS (SELECT 1) SELECT * FROM a"));
-    ASSERT_TRUE(trino_sql_is_write_op((const SQLCHAR *)
-        "WITH a AS (SELECT 1) INSERT INTO t SELECT * FROM a"));
+    ASSERT_FALSE(
+        trino_sql_is_write_op((const SQLCHAR *)"WITH a AS (SELECT 1) SELECT * FROM a"));
+    ASSERT_TRUE(trino_sql_is_write_op(
+        (const SQLCHAR *)"WITH a AS (SELECT 1) INSERT INTO t SELECT * FROM a"));
 }
 
 /* Identifiers that merely start with a keyword must not match. */
 TEST(write_op_detection_word_boundary)
 {
-    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)
-        "SELECT * FROM inserted_rows"));
+    ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"SELECT * FROM inserted_rows"));
     ASSERT_FALSE(trino_sql_is_write_op((const SQLCHAR *)"SELECT updates FROM t"));
 }
 
@@ -195,9 +228,8 @@ TEST(datasources_basic)
     ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
     ASSERT_EQ(ret, SQL_SUCCESS);
 
-    ret = SQLDataSources(env, SQL_FETCH_FIRST,
-                         server_name, sizeof(server_name), &server_len,
-                         driver_name, sizeof(driver_name), &driver_len);
+    ret = SQLDataSources(env, SQL_FETCH_FIRST, server_name, sizeof(server_name),
+                         &server_len, driver_name, sizeof(driver_name), &driver_len);
     ASSERT_EQ(ret, SQL_SUCCESS);
     ASSERT_TRUE(server_len > 0);
     ASSERT_TRUE(driver_len > 0);
@@ -221,8 +253,8 @@ TEST(drivers_basic)
     ASSERT_EQ(ret, SQL_SUCCESS);
 
     ret = SQLDrivers(env, 0, /* SQL_DRIVER_FIRST = 0 */
-                     driver_data, sizeof(driver_data), &data_len,
-                     driver_attrs, sizeof(driver_attrs), &attrs_len);
+                     driver_data, sizeof(driver_data), &data_len, driver_attrs,
+                     sizeof(driver_attrs), &attrs_len);
     ASSERT_EQ(ret, SQL_SUCCESS);
     ASSERT_TRUE(data_len > 0);
     ASSERT_TRUE(attrs_len > 0);

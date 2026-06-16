@@ -8,8 +8,11 @@ IndentWidth: 4
 TabWidth: 4
 UseTab: Never
 ColumnLimit: 90
-BreakBeforeBraces: Attach
+# Linux style: braces attach for control flow, but functions open on a new
+# line (matching the existing codebase).
+BreakBeforeBraces: Linux
 AllowShortFunctionsOnASingleLine: None
+AllowShortCaseLabelsOnASingleLine: true
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 PointerAlignment: Right

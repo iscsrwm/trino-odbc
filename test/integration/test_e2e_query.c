@@ -18,9 +18,33 @@ int tests_run = 0;
 int tests_passed = 0;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((long long)(a) != (long long)(b)) { printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b); return; } tests_passed++; } while(0)
-#define ASSERT_STREQ(a, b) do { tests_run++; if (strcmp((a),(b)) != 0) { printf("FAIL: %s:%d \"%s\" != \"%s\"\n", __func__, __LINE__, (a), (b)); return; } tests_passed++; } while(0)
-#define ASSERT_TRUE(c) do { tests_run++; if (!(c)) { printf("FAIL: %s:%d %s\n", __func__, __LINE__, #c); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((long long)(a) != (long long)(b)) {                                          \
+            printf("FAIL: %s:%d %s != %s\n", __func__, __LINE__, #a, #b);                \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_STREQ(a, b)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (strcmp((a), (b)) != 0) {                                                     \
+            printf("FAIL: %s:%d \"%s\" != \"%s\"\n", __func__, __LINE__, (a), (b));      \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_TRUE(c)                                                                   \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(c)) {                                                                      \
+            printf("FAIL: %s:%d %s\n", __func__, __LINE__, #c);                          \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* ------------------------------------------------------------------------
  * Mock transport: a scripted sequence of responses.
@@ -32,8 +56,8 @@ typedef struct {
     char last_body[256];
 } mock_script_t;
 
-static char *mock_transport(const char *method, const char *url,
-                            const char *body, void *ctx)
+static char *mock_transport(const char *method, const char *url, const char *body,
+                            void *ctx)
 {
     (void)url;
     mock_script_t *s = (mock_script_t *)ctx;
@@ -46,7 +70,8 @@ static char *mock_transport(const char *method, const char *url,
     }
 
     const char *resp = s->responses[s->index];
-    if (!resp) return NULL; /* exhausted -> simulate failure */
+    if (!resp)
+        return NULL; /* exhausted -> simulate failure */
     s->index++;
     return strdup(resp);
 }
@@ -55,20 +80,24 @@ static char *mock_transport(const char *method, const char *url,
  * through the public SQLDriverConnect entry point (as a driver manager would). */
 static SQLHSTMT make_connected_stmt(SQLHENV *env_out, SQLHDBC *dbc_out)
 {
-    SQLHENV env; SQLHDBC dbc; SQLHSTMT stmt;
-    if (SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env) != SQL_SUCCESS) return NULL;
-    if (SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc) != SQL_SUCCESS) return NULL;
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt;
+    if (SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env) != SQL_SUCCESS)
+        return NULL;
+    if (SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc) != SQL_SUCCESS)
+        return NULL;
 
     SQLCHAR out[256];
     SQLSMALLINT out_len = 0;
-    if (SQLDriverConnect(dbc, NULL,
-                         (SQLCHAR *)"Server=localhost;Port=8080;Catalog=memory",
-                         SQL_NTS, out, sizeof(out), &out_len,
-                         SQL_DRIVER_NOPROMPT) != SQL_SUCCESS) {
+    if (SQLDriverConnect(
+            dbc, NULL, (SQLCHAR *)"Server=localhost;Port=8080;Catalog=memory", SQL_NTS,
+            out, sizeof(out), &out_len, SQL_DRIVER_NOPROMPT) != SQL_SUCCESS) {
         return NULL;
     }
 
-    if (SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt) != SQL_SUCCESS) return NULL;
+    if (SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt) != SQL_SUCCESS)
+        return NULL;
 
     *env_out = env;
     *dbc_out = dbc;
@@ -91,12 +120,12 @@ TEST(e2e_select_single_page)
         "{\"name\":\"name\",\"type\":\"varchar\"}],"
         "\"data\":[[1,\"alice\"],[2,\"bob\"]],"
         "\"stats\":{\"state\":\"FINISHED\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
@@ -109,7 +138,8 @@ TEST(e2e_select_single_page)
 
     /* Row 1 */
     ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
-    char buf[64]; SQLLEN ind = 0;
+    char buf[64];
+    SQLLEN ind = 0;
     ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_CHAR, buf, sizeof(buf), &ind), SQL_SUCCESS);
     ASSERT_STREQ(buf, "1");
     ASSERT_EQ(SQLGetData(stmt, 2, SQL_C_CHAR, buf, sizeof(buf), &ind), SQL_SUCCESS);
@@ -144,13 +174,12 @@ TEST(e2e_select_multi_page)
         "\"nextUri\":\"http://h/p2\","
         "\"stats\":{\"state\":\"RUNNING\"}}",
         /* page 2: 1 more row, finished */
-        "{\"id\":\"q2\",\"data\":[[30]],\"stats\":{\"state\":\"FINISHED\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        "{\"id\":\"q2\",\"data\":[[30]],\"stats\":{\"state\":\"FINISHED\"}}", NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
@@ -158,12 +187,14 @@ TEST(e2e_select_multi_page)
 
     /* The query() loop only guarantees the first data page; SQLFetch must pull
      * the remaining page(s) via nextUri. Collect all rows. */
-    char buf[64]; SQLLEN ind = 0;
+    char buf[64];
+    SQLLEN ind = 0;
     int count = 0;
     char seen[8][64];
     while (SQLFetch(stmt) == SQL_SUCCESS) {
         ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_CHAR, buf, sizeof(buf), &ind), SQL_SUCCESS);
-        if (count < 8) strcpy(seen[count], buf);
+        if (count < 8)
+            strcpy(seen[count], buf);
         count++;
     }
     ASSERT_EQ(count, 3);
@@ -188,20 +219,23 @@ TEST(e2e_getdata_typed)
         "{\"name\":\"d\",\"type\":\"double\"}],"
         "\"data\":[[42,9000000000,3.5]],"
         "\"stats\":{\"state\":\"FINISHED\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
-    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT i,b,d FROM t", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT i,b,d FROM t", SQL_NTS),
+              SQL_SUCCESS);
     ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
 
     SQLLEN ind = 0;
-    SQLINTEGER i = 0; SQLBIGINT b = 0; SQLDOUBLE d = 0;
+    SQLINTEGER i = 0;
+    SQLBIGINT b = 0;
+    SQLDOUBLE d = 0;
     ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_LONG, &i, sizeof(i), &ind), SQL_SUCCESS);
     ASSERT_EQ(i, 42);
     ASSERT_EQ(SQLGetData(stmt, 2, SQL_C_SBIGINT, &b, sizeof(b), &ind), SQL_SUCCESS);
@@ -224,19 +258,20 @@ TEST(e2e_getdata_null)
         "\"columns\":[{\"name\":\"v\",\"type\":\"varchar\"}],"
         "\"data\":[[null]],"
         "\"stats\":{\"state\":\"FINISHED\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
     ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT v FROM t", SQL_NTS), SQL_SUCCESS);
     ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
 
-    char buf[16] = "untouched"; SQLLEN ind = 0;
+    char buf[16] = "untouched";
+    SQLLEN ind = 0;
     ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_CHAR, buf, sizeof(buf), &ind), SQL_SUCCESS);
     ASSERT_EQ(ind, SQL_NULL_DATA);
 
@@ -253,16 +288,17 @@ TEST(e2e_query_error)
         "{\"id\":\"q5\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
         "{\"id\":\"q5\",\"error\":{\"message\":\"Table not found\","
         "\"errorName\":\"TABLE_NOT_FOUND\",\"errorType\":\"USER_ERROR\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
-    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT * FROM missing", SQL_NTS), SQL_ERROR);
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT * FROM missing", SQL_NTS),
+              SQL_ERROR);
 
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
     SQLFreeHandle(SQL_HANDLE_DBC, dbc);
@@ -275,13 +311,12 @@ TEST(e2e_write_rowcount)
 {
     const char *responses[] = {
         "{\"id\":\"q6\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
-        "{\"id\":\"q6\",\"stats\":{\"state\":\"FINISHED\",\"processedRows\":7}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        "{\"id\":\"q6\",\"stats\":{\"state\":\"FINISHED\",\"processedRows\":7}}", NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
@@ -305,13 +340,15 @@ TEST(e2e_write_rowcount)
 /* SQLDriverConnect parses the connection string and SQLDisconnect closes it. */
 TEST(e2e_driver_connect_disconnect)
 {
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
 
     SQLCHAR out[256];
     SQLSMALLINT out_len = 0;
-    ASSERT_EQ(SQLDriverConnect(dbc, NULL,
+    ASSERT_EQ(SQLDriverConnect(
+                  dbc, NULL,
                   (SQLCHAR *)"Server=trino.example.com;Port=8443;User=bob;SSL=true",
                   SQL_NTS, out, sizeof(out), &out_len, SQL_DRIVER_NOPROMPT),
               SQL_SUCCESS);
@@ -336,14 +373,13 @@ TEST(e2e_driver_connect_disconnect)
 /* SQLConnect connects with a host + user + password (PASSWORD auth). */
 TEST(e2e_sqlconnect)
 {
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
 
-    ASSERT_EQ(SQLConnect(dbc,
-                  (SQLCHAR *)"trino.example.com:9090", SQL_NTS,
-                  (SQLCHAR *)"alice", SQL_NTS,
-                  (SQLCHAR *)"secret", SQL_NTS),
+    ASSERT_EQ(SQLConnect(dbc, (SQLCHAR *)"trino.example.com:9090", SQL_NTS,
+                         (SQLCHAR *)"alice", SQL_NTS, (SQLCHAR *)"secret", SQL_NTS),
               SQL_SUCCESS);
 
     trino_conn_t *conn = (trino_conn_t *)dbc;
@@ -370,30 +406,42 @@ TEST(e2e_getdata_datetime)
         "{\"name\":\"b\",\"type\":\"boolean\"}],"
         "\"data\":[[\"2026-06-16\",\"13:45:30\",\"2026-06-16 13:45:30.123456\",true]],"
         "\"stats\":{\"state\":\"FINISHED\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
-    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT d,t,ts,b FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT d,t,ts,b FROM x", SQL_NTS),
+              SQL_SUCCESS);
     ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
 
     SQLLEN ind = 0;
-    SQL_DATE_STRUCT d; SQL_TIME_STRUCT t; SQL_TIMESTAMP_STRUCT ts; unsigned char b;
+    SQL_DATE_STRUCT d;
+    SQL_TIME_STRUCT t;
+    SQL_TIMESTAMP_STRUCT ts;
+    unsigned char b;
 
     ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_TYPE_DATE, &d, sizeof(d), &ind), SQL_SUCCESS);
-    ASSERT_EQ(d.year, 2026); ASSERT_EQ(d.month, 6); ASSERT_EQ(d.day, 16);
+    ASSERT_EQ(d.year, 2026);
+    ASSERT_EQ(d.month, 6);
+    ASSERT_EQ(d.day, 16);
 
     ASSERT_EQ(SQLGetData(stmt, 2, SQL_C_TYPE_TIME, &t, sizeof(t), &ind), SQL_SUCCESS);
-    ASSERT_EQ(t.hour, 13); ASSERT_EQ(t.minute, 45); ASSERT_EQ(t.second, 30);
+    ASSERT_EQ(t.hour, 13);
+    ASSERT_EQ(t.minute, 45);
+    ASSERT_EQ(t.second, 30);
 
-    ASSERT_EQ(SQLGetData(stmt, 3, SQL_C_TYPE_TIMESTAMP, &ts, sizeof(ts), &ind), SQL_SUCCESS);
-    ASSERT_EQ(ts.year, 2026); ASSERT_EQ(ts.day, 16); ASSERT_EQ(ts.hour, 13);
-    ASSERT_EQ(ts.second, 30); ASSERT_EQ(ts.fraction, 123456000);
+    ASSERT_EQ(SQLGetData(stmt, 3, SQL_C_TYPE_TIMESTAMP, &ts, sizeof(ts), &ind),
+              SQL_SUCCESS);
+    ASSERT_EQ(ts.year, 2026);
+    ASSERT_EQ(ts.day, 16);
+    ASSERT_EQ(ts.hour, 13);
+    ASSERT_EQ(ts.second, 30);
+    ASSERT_EQ(ts.fraction, 123456000);
 
     ASSERT_EQ(SQLGetData(stmt, 4, SQL_C_BIT, &b, sizeof(b), &ind), SQL_SUCCESS);
     ASSERT_EQ(b, 1);
@@ -415,20 +463,22 @@ TEST(e2e_getdata_truncation_and_range)
         "{\"name\":\"big\",\"type\":\"bigint\"}],"
         "\"data\":[[\"hello world\",99999]],"
         "\"stats\":{\"state\":\"FINISHED\"}}",
-        NULL
-    };
-    mock_script_t script = { responses, 0, "", "" };
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
     trino_http_set_test_transport(mock_transport, &script);
 
-    SQLHENV env; SQLHDBC dbc;
+    SQLHENV env;
+    SQLHDBC dbc;
     SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
     ASSERT_TRUE(stmt != NULL);
 
-    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT s,big FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT s,big FROM x", SQL_NTS),
+              SQL_SUCCESS);
     ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
 
     /* Char truncation: buffer too small => SUCCESS_WITH_INFO, full length set. */
-    char small[6]; SQLLEN ind = 0;
+    char small[6];
+    SQLLEN ind = 0;
     ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_CHAR, small, sizeof(small), &ind),
               SQL_SUCCESS_WITH_INFO);
     ASSERT_STREQ(small, "hello");

@@ -7,13 +7,12 @@
 #include <string.h>
 
 /* Configure curl for mutual TLS authentication */
-SQLRETURN trino_cert_auth_configure(CURL *handle,
-                                    const char *cert_path,
-                                    const char *key_path,
-                                    const char *key_password,
+SQLRETURN trino_cert_auth_configure(CURL *handle, const char *cert_path,
+                                    const char *key_path, const char *key_password,
                                     const char *ca_path)
 {
-    if (!handle) return SQL_ERROR;
+    if (!handle)
+        return SQL_ERROR;
 
     if (cert_path) {
         curl_easy_setopt(handle, CURLOPT_SSLCERT, cert_path);

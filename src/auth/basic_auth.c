@@ -9,13 +9,16 @@
 
 char *trino_basic_auth_format(const char *user, const char *password)
 {
-    if (!user) return NULL;
+    if (!user)
+        return NULL;
 
     size_t len = strlen(user);
-    if (password) len += 1 + strlen(password);
+    if (password)
+        len += 1 + strlen(password);
 
     char *result = malloc(len + 1);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     snprintf(result, len + 1, "%s:%s", user, password ? password : "");
     return result;

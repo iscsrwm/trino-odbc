@@ -9,17 +9,32 @@ extern int tests_run;
 extern int tests_passed;
 
 #define TEST(name) void test_##name(void)
-#define ASSERT_EQ(a, b) do { tests_run++; if ((a) != (b)) { printf("FAIL: %s:%d\n", __func__, __LINE__); return; } tests_passed++; } while(0)
-#define ASSERT_NOT_NULL(p) do { tests_run++; if (!(p)) { printf("FAIL: %s:%d NULL\n", __func__, __LINE__); return; } tests_passed++; } while(0)
+#define ASSERT_EQ(a, b)                                                                  \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((a) != (b)) {                                                                \
+            printf("FAIL: %s:%d\n", __func__, __LINE__);                                 \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NOT_NULL(p)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(p)) {                                                                      \
+            printf("FAIL: %s:%d NULL\n", __func__, __LINE__);                            \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 TEST(json_parse_columns)
 {
-    const char *json =
-        "{\"columns\":["
-        "{\"name\":\"id\",\"type\":\"integer\"},"
-        "{\"name\":\"name\",\"type\":\"varchar\"},"
-        "{\"name\":\"created\",\"type\":\"timestamp\"}"
-        "]}";
+    const char *json = "{\"columns\":["
+                       "{\"name\":\"id\",\"type\":\"integer\"},"
+                       "{\"name\":\"name\",\"type\":\"varchar\"},"
+                       "{\"name\":\"created\",\"type\":\"timestamp\"}"
+                       "]}";
 
     SQLULEN col_count = 0;
     trino_column_meta_t *cols = trino_parse_columns(json, &col_count);
@@ -48,7 +63,8 @@ TEST(json_parse_empty_columns)
 
     ASSERT_EQ(col_count, 0);
     /* Empty columns may return NULL or empty array */
-    if (cols) free(cols);
+    if (cols)
+        free(cols);
 }
 
 TEST(json_parse_no_columns)
@@ -59,7 +75,8 @@ TEST(json_parse_no_columns)
     trino_column_meta_t *cols = trino_parse_columns(json, &col_count);
 
     ASSERT_EQ(col_count, 0);
-    if (cols) free(cols);
+    if (cols)
+        free(cols);
 }
 
 TEST(query_results_free)
@@ -75,19 +92,42 @@ TEST(query_results_free)
     tests_passed++;
 }
 
-#define ASSERT_STREQ(a, b) do { tests_run++; if (strcmp((a),(b)) != 0) { printf("FAIL: %s:%d \"%s\" != \"%s\"\n", __func__, __LINE__, (a), (b)); return; } tests_passed++; } while(0)
-#define ASSERT_TRUE(c) do { tests_run++; if (!(c)) { printf("FAIL: %s:%d\n", __func__, __LINE__); return; } tests_passed++; } while(0)
-#define ASSERT_NULL(p) do { tests_run++; if ((p)) { printf("FAIL: %s:%d not NULL\n", __func__, __LINE__); return; } tests_passed++; } while(0)
+#define ASSERT_STREQ(a, b)                                                               \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (strcmp((a), (b)) != 0) {                                                     \
+            printf("FAIL: %s:%d \"%s\" != \"%s\"\n", __func__, __LINE__, (a), (b));      \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_TRUE(c)                                                                   \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if (!(c)) {                                                                      \
+            printf("FAIL: %s:%d\n", __func__, __LINE__);                                 \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
+#define ASSERT_NULL(p)                                                                   \
+    do {                                                                                 \
+        tests_run++;                                                                     \
+        if ((p)) {                                                                       \
+            printf("FAIL: %s:%d not NULL\n", __func__, __LINE__);                        \
+            return;                                                                      \
+        }                                                                                \
+        tests_passed++;                                                                  \
+    } while (0)
 
 /* Full QueryResults: columns + data + stats parsed into the results struct. */
 TEST(parse_query_response_rows)
 {
-    const char *json =
-        "{\"id\":\"q-1\","
-        "\"columns\":[{\"name\":\"id\",\"type\":\"integer\"},"
-        "{\"name\":\"name\",\"type\":\"varchar\"}],"
-        "\"data\":[[1,\"alice\"],[2,\"bob\"],[3,null]],"
-        "\"stats\":{\"state\":\"FINISHED\",\"processedRows\":3}}";
+    const char *json = "{\"id\":\"q-1\","
+                       "\"columns\":[{\"name\":\"id\",\"type\":\"integer\"},"
+                       "{\"name\":\"name\",\"type\":\"varchar\"}],"
+                       "\"data\":[[1,\"alice\"],[2,\"bob\"],[3,null]],"
+                       "\"stats\":{\"state\":\"FINISHED\",\"processedRows\":3}}";
 
     trino_query_results_t *r = calloc(1, sizeof(*r));
     ASSERT_NOT_NULL(r);
@@ -118,16 +158,14 @@ TEST(parse_query_response_pagination)
     trino_query_results_t *r = calloc(1, sizeof(*r));
     ASSERT_NOT_NULL(r);
 
-    const char *page1 =
-        "{\"id\":\"q-2\","
-        "\"columns\":[{\"name\":\"n\",\"type\":\"bigint\"}],"
-        "\"data\":[[10],[20]],"
-        "\"nextUri\":\"http://h/next\","
-        "\"stats\":{\"state\":\"RUNNING\"}}";
-    const char *page2 =
-        "{\"id\":\"q-2\","
-        "\"data\":[[30],[40],[50]],"
-        "\"stats\":{\"state\":\"FINISHED\"}}";
+    const char *page1 = "{\"id\":\"q-2\","
+                        "\"columns\":[{\"name\":\"n\",\"type\":\"bigint\"}],"
+                        "\"data\":[[10],[20]],"
+                        "\"nextUri\":\"http://h/next\","
+                        "\"stats\":{\"state\":\"RUNNING\"}}";
+    const char *page2 = "{\"id\":\"q-2\","
+                        "\"data\":[[30],[40],[50]],"
+                        "\"stats\":{\"state\":\"FINISHED\"}}";
 
     ASSERT_EQ(trino_parse_query_response(page1, r), SQL_SUCCESS);
     ASSERT_EQ(r->column_count, 1);
@@ -135,9 +173,9 @@ TEST(parse_query_response_pagination)
     ASSERT_NOT_NULL(r->next_uri);
 
     ASSERT_EQ(trino_parse_query_response(page2, r), SQL_SUCCESS);
-    ASSERT_EQ(r->column_count, 1);   /* unchanged */
-    ASSERT_EQ(r->row_count, 5);      /* accumulated */
-    ASSERT_NULL(r->next_uri);        /* cleared on final page */
+    ASSERT_EQ(r->column_count, 1); /* unchanged */
+    ASSERT_EQ(r->row_count, 5);    /* accumulated */
+    ASSERT_NULL(r->next_uri);      /* cleared on final page */
     ASSERT_EQ(r->state, TRINO_QUERY_STATE_FINISHED);
 
     ASSERT_STREQ((char *)r->rows[0][0], "10");
@@ -171,12 +209,11 @@ TEST(parse_query_response_error)
 /* Complex cell types (array/map/row) surface as serialized JSON strings. */
 TEST(parse_query_response_complex_cells)
 {
-    const char *json =
-        "{\"id\":\"q-4\","
-        "\"columns\":[{\"name\":\"tags\",\"type\":\"array(varchar)\"},"
-        "{\"name\":\"props\",\"type\":\"map(varchar,integer)\"}],"
-        "\"data\":[[[\"a\",\"b\"],{\"k\":1}]],"
-        "\"stats\":{\"state\":\"FINISHED\"}}";
+    const char *json = "{\"id\":\"q-4\","
+                       "\"columns\":[{\"name\":\"tags\",\"type\":\"array(varchar)\"},"
+                       "{\"name\":\"props\",\"type\":\"map(varchar,integer)\"}],"
+                       "\"data\":[[[\"a\",\"b\"],{\"k\":1}]],"
+                       "\"stats\":{\"state\":\"FINISHED\"}}";
 
     trino_query_results_t *r = calloc(1, sizeof(*r));
     ASSERT_NOT_NULL(r);
