@@ -1,10 +1,16 @@
 # Building the Windows MSI installer
 
 This directory contains a [WiX Toolset](https://wixtoolset.org/) installer that
-packages the Trino ODBC driver as a Windows `.msi`. The MSI installs the driver
-DLL and its runtime dependencies into `C:\Program Files\TrinoODBC\bin` and
-registers it with the Windows ODBC subsystem (so it appears in the **ODBC Data
-Source Administrator**, `odbcad32.exe`).
+packages the Trino ODBC driver as a Windows `.msi`. The MSI installs a single,
+self-contained driver DLL into `C:\Program Files\TrinoODBC\bin` and registers it
+with the Windows ODBC subsystem (so it appears in the **ODBC Data Source
+Administrator**, `odbcad32.exe`).
+
+curl and json-c are **statically linked** into `trino_odbc.dll` (via the vcpkg
+`x64-windows-static-md` triplet), so there are no dependency DLLs to ship. The
+`-md` triplet links the dependencies statically while keeping the **dynamic
+Universal CRT**, which avoids CRT-mismatch issues and means end users only need
+the standard VC++ runtime that ships with Windows.
 
 ## Prerequisites (on the Windows build machine)
 
@@ -39,17 +45,13 @@ This produces `trino_odbc-x64.msi` in the repository root. It:
 ## Manual steps (if you prefer to run them yourself)
 
 ```powershell
-# 1. Configure + build the driver
+# 1. Configure + build the driver (static curl/json-c)
 cmake --preset windows-x64
 cmake --build --preset windows-x64
 
-# 2. (optional) gather dependency DLLs next to the driver
-copy build-windows\vcpkg_installed\x64-windows\bin\*.dll build-windows\src\Release\
-
-# 3. Build the MSI
+# 2. Build the MSI (single self-contained DLL; no dependency DLLs)
 wix build installer/trino_odbc.wxs -arch x64 `
     -d "BinDir=build-windows/src/Release" `
-    -d "DEPS_BUNDLED=true" `
     -o trino_odbc-x64.msi
 ```
 
@@ -70,13 +72,16 @@ Driver attributes registered:
 | `DriverODBCVer` | 03.80 |
 | `SQLLevel` | 1 |
 
-## Dependency DLLs
+## Dependencies
 
-By default the MSI bundles `libcurl.dll` and `json-c.dll` from vcpkg. If your
-vcpkg build emits different names (e.g. a versioned curl DLL) or you choose to
-**static-link** curl/json-c, adjust the dependency `Component`s in
-`trino_odbc.wxs` (or remove them for a static build). `wix harvest` can also
-generate the file list automatically.
+The build statically links curl and json-c into `trino_odbc.dll` using the
+vcpkg `x64-windows-static-md` triplet (selected by the `windows-x64` CMake
+preset, which also sets `-DTRINO_ODBC_STATIC_DEPS=ON`). The MSI therefore ships
+a single self-contained DLL with no dependency DLLs.
+
+If you ever want **dynamic** dependencies instead, configure with
+`-DTRINO_ODBC_STATIC_DEPS=OFF` and the `x64-windows` triplet, then add `File`
+components for the runtime DLLs to `trino_odbc.wxs` (or use `wix harvest`).
 
 ## Code signing (recommended for distribution)
 

@@ -46,20 +46,14 @@ if (-not (Test-Path (Join-Path $binDir "trino_odbc.dll"))) {
     throw "trino_odbc.dll not found in $binDir"
 }
 
-# Copy the vcpkg runtime DLLs (curl, json-c and their transitive deps) next to
-# the driver so they can be bundled. vcpkg places them under the installed tree.
-$vcpkgBin = Join-Path $repoRoot "build-windows\vcpkg_installed\x64-windows\bin"
-if (Test-Path $vcpkgBin) {
-    Write-Host "==> Bundling runtime DLLs from $vcpkgBin"
-    Copy-Item (Join-Path $vcpkgBin "*.dll") $binDir -Force
-}
+# curl and json-c are statically linked into trino_odbc.dll (the windows-x64
+# preset uses the x64-windows-static-md vcpkg triplet), so there are no runtime
+# dependency DLLs to bundle - the MSI ships a single self-contained driver DLL.
 
 Write-Host "==> Building MSI with WiX"
-$depsBundled = if (Test-Path (Join-Path $binDir "libcurl.dll")) { "true" } else { "false" }
 wix build installer/trino_odbc.wxs `
     -arch x64 `
     -d "BinDir=$binDir" `
-    -d "DEPS_BUNDLED=$depsBundled" `
     -o $Output
 
 Write-Host "==> Done: $Output"

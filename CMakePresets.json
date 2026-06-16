@@ -17,7 +17,8 @@
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTS": "OFF",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "TRINO_ODBC_STATIC_DEPS": "ON"
       }
     }
   ],

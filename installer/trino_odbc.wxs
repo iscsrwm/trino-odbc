@@ -15,8 +15,9 @@
         -d BinDir=build-windows/src/Release ^
         -o trino_odbc-x64.msi
 
-  The BinDir preprocessor variable points at the directory containing the
-  built DLLs (driver + curl + json-c, etc.).
+  The BinDir preprocessor variable points at the directory containing the built
+  trino_odbc.dll. curl and json-c are statically linked into the driver DLL
+  (vcpkg x64-windows-static-md triplet), so no dependency DLLs are shipped.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Trino ODBC Driver"
@@ -61,20 +62,11 @@
           </ODBCDriver>
         </File>
       </Component>
-
       <!--
-        Runtime dependency DLLs. These file names depend on how the driver is
-        linked. If you static-link curl/json-c, remove these components. If the
-        DLL names differ in your vcpkg build (e.g. libcurl.dll vs curl.dll),
-        adjust the Source/Name accordingly; the harvested set can also be
-        generated with `wix harvest`.
+        curl and json-c are statically linked into trino_odbc.dll, so there are
+        no dependency DLLs to ship. If you switch to dynamic dependencies, add
+        File components here for the runtime DLLs (or use `wix harvest`).
       -->
-      <Component Id="CurlDll" Bitness="always64" Guid="*" Condition="DEPS_BUNDLED">
-        <File Source="$(var.BinDir)\libcurl.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="JsonCDll" Bitness="always64" Guid="*" Condition="DEPS_BUNDLED">
-        <File Source="$(var.BinDir)\json-c.dll" KeyPath="yes" />
-      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>

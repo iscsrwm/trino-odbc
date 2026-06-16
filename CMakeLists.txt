@@ -15,8 +15,18 @@ option(BUILD_TESTS "Build test suite" ON)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
+# When building against static vcpkg dependencies (x64-windows-static[-md]),
+# the curl/json-c CMake package configs carry the static archives plus their
+# transitive system libraries (ws2_32, crypt32, ...). Prefer CONFIG mode so
+# those usage requirements are picked up.
+option(TRINO_ODBC_STATIC_DEPS "Link curl/json-c statically (vcpkg static triplet)" OFF)
+
 # Find dependencies
-find_package(CURL REQUIRED)
+if(TRINO_ODBC_STATIC_DEPS)
+    find_package(CURL CONFIG REQUIRED)
+else()
+    find_package(CURL REQUIRED)
+endif()
 find_package(Threads REQUIRED)
 
 # json-c for JSON parsing. Prefer the CMake package config (how vcpkg and newer
