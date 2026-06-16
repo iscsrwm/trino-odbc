@@ -39,6 +39,7 @@ static trino_desc_record_t *trino_desc_get_record(trino_descriptor_t *desc, SQLU
 SQLRETURN trino_desc_set_field(trino_descriptor_t *desc, SQLUSMALLINT rec_num,
                                SQLINTEGER field, SQLPOINTER value, SQLINTEGER str_len)
 {
+    (void)str_len;
     if (!desc) return SQL_ERROR;
 
     /* Handle count field */

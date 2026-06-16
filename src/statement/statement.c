@@ -211,7 +211,6 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
     if (!final_sql) {
         trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_MEMORY_ALLOCATION,
                              0, "Failed to bind parameters");
-        trino_http_client_destroy(client);
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
@@ -226,7 +225,6 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
     if (!results) {
         trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_REQUEST_FAILED,
                              0, "Query execution failed");
-        trino_http_client_destroy(client);
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
@@ -237,7 +235,6 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
                                     results->error_message,
                                     results->error_type);
         trino_query_results_free(results);
-        trino_http_client_destroy(client);
         pthread_mutex_unlock(&stmt->mutex);
         return SQL_ERROR;
     }
@@ -279,16 +276,19 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
                 trino_desc_record_t *rec = &stmt->ird->records[i];
                 rec->sql_type = col->odbc_type;
                 rec->nullable = col->nullable;
+                /* column_name/type_name are TRINO_MAX_IDENTIFIER_LEN+1 bytes;
+                 * copy at most LEN bytes and always NUL-terminate. */
                 strncpy((char *)rec->column_name, (char *)col->name,
                         TRINO_MAX_IDENTIFIER_LEN);
+                rec->column_name[TRINO_MAX_IDENTIFIER_LEN] = '\0';
                 strncpy((char *)rec->type_name, (char *)col->type,
                         TRINO_MAX_IDENTIFIER_LEN);
+                rec->type_name[TRINO_MAX_IDENTIFIER_LEN] = '\0';
             }
             stmt->ird->record_count = results->column_count;
         }
     }
 
-    trino_http_client_destroy(client);
     pthread_mutex_unlock(&stmt->mutex);
     return SQL_SUCCESS;
 }
@@ -317,7 +317,7 @@ SQLRETURN SQLCancel(SQLHSTMT statement_handle)
         stmt->at_end = true;
     }
 
-    trino_http_client_destroy(client);
+    /* client is owned by the connection; do not destroy here. */
     return ret;
 }
 
@@ -469,6 +469,7 @@ SQLRETURN SQLSetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute,
 SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr,
                               SQLPOINTER value, SQLINTEGER str_len)
 {
+    (void)str_len;
     pthread_mutex_lock(&stmt->mutex);
 
     switch (attr) {

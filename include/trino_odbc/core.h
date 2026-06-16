@@ -121,6 +121,10 @@ typedef struct {
     struct trino_stmt_s **statements;
     SQLULEN               stmt_count;
     SQLULEN               stmt_capacity;
+
+    /* Cached HTTP client, owned by the connection and reused across statements
+     * (created lazily by trino_conn_get_http_client). */
+    struct trino_http_client_s *http_client;
 } trino_conn_t;
 
 /* ========================================================================

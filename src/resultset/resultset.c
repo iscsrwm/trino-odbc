@@ -77,6 +77,7 @@ SQLRETURN SQLFetch(SQLHSTMT statement_handle)
             return SQL_NO_DATA;
         }
 
+        /* client is owned by the connection; reused across pages, not freed. */
         trino_http_client_t *client =
             stmt->conn ? trino_conn_get_http_client(stmt->conn) : NULL;
         if (!client) {
@@ -85,7 +86,6 @@ SQLRETURN SQLFetch(SQLHSTMT statement_handle)
         }
 
         SQLRETURN fr = trino_http_client_fetch_next(client, qr);
-        trino_http_client_destroy(client);
 
         if (fr == SQL_ERROR) {
             return SQL_ERROR;
@@ -193,7 +193,8 @@ SQLRETURN SQLFetchScroll(SQLHSTMT statement_handle, SQLSMALLINT fetch_orientatio
 
     trino_resultset_t *rs = (trino_resultset_t *)stmt->resultset;
 
-    /* A client is only needed to page forward; create one on demand. */
+    /* A client is only needed to page forward; it is owned by the connection
+     * and reused, so it is not destroyed here. */
     trino_http_client_t *client = NULL;
     if (fetch_orientation == SQL_FETCH_NEXT && stmt->conn) {
         client = trino_conn_get_http_client(stmt->conn);
@@ -201,8 +202,6 @@ SQLRETURN SQLFetchScroll(SQLHSTMT statement_handle, SQLSMALLINT fetch_orientatio
 
     SQLRETURN ret = trino_resultset_fetch_scroll(rs, fetch_orientation,
                                                   (SQLROWID)fetch_offset, client);
-
-    if (client) trino_http_client_destroy(client);
 
     if (ret == SQL_SUCCESS) {
         stmt->current_row = rs->current_row;

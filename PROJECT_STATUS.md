@@ -84,6 +84,14 @@ results, and it does not interoperate with a real ODBC Driver Manager.
 
 ---
 
+## Missing connection entry points
+
+- **No `SQLConnect` / `SQLDriverConnect` / `SQLDisconnect`** are implemented or
+  exported. A real ODBC Driver Manager connects exclusively through these, so
+  the driver cannot be opened by any DM-based application — even though the
+  internal connection logic (`trino_conn_connect`, `trino_parse_conn_string`)
+  exists. Tracked as P0.5 in `REMEDIATION_PLAN.md`.
+
 ## Project hygiene gaps
 
 - **No CI/CD** (no `.github/workflows`).

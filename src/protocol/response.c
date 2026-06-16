@@ -349,7 +349,7 @@ static const char *get_base_type(const char *trino_type)
     static char base_type[128];
     size_t len = strlen(trino_type);
     if (len >= sizeof(base_type)) len = sizeof(base_type) - 1;
-    strncpy(base_type, trino_type, len);
+    memcpy(base_type, trino_type, len);
     base_type[len] = '\0';
     
     /* Strip parameters like (10,2) from decimal(10,2) */

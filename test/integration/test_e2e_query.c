@@ -51,16 +51,22 @@ static char *mock_transport(const char *method, const char *url,
     return strdup(resp);
 }
 
-/* Build a connected statement handle wired to the mock transport. */
+/* Build a connected statement handle wired to the mock transport, connecting
+ * through the public SQLDriverConnect entry point (as a driver manager would). */
 static SQLHSTMT make_connected_stmt(SQLHENV *env_out, SQLHDBC *dbc_out)
 {
     SQLHENV env; SQLHDBC dbc; SQLHSTMT stmt;
     if (SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env) != SQL_SUCCESS) return NULL;
     if (SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc) != SQL_SUCCESS) return NULL;
 
-    trino_conn_config_t cfg;
-    trino_conn_config_defaults(&cfg);
-    if (trino_conn_connect((trino_conn_t *)dbc, &cfg) != SQL_SUCCESS) return NULL;
+    SQLCHAR out[256];
+    SQLSMALLINT out_len = 0;
+    if (SQLDriverConnect(dbc, NULL,
+                         (SQLCHAR *)"Server=localhost;Port=8080;Catalog=memory",
+                         SQL_NTS, out, sizeof(out), &out_len,
+                         SQL_DRIVER_NOPROMPT) != SQL_SUCCESS) {
+        return NULL;
+    }
 
     if (SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt) != SQL_SUCCESS) return NULL;
 
@@ -296,10 +302,68 @@ TEST(e2e_write_rowcount)
     trino_http_set_test_transport(NULL, NULL);
 }
 
+/* SQLDriverConnect parses the connection string and SQLDisconnect closes it. */
+TEST(e2e_driver_connect_disconnect)
+{
+    SQLHENV env; SQLHDBC dbc;
+    ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
+    ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
+
+    SQLCHAR out[256];
+    SQLSMALLINT out_len = 0;
+    ASSERT_EQ(SQLDriverConnect(dbc, NULL,
+                  (SQLCHAR *)"Server=trino.example.com;Port=8443;User=bob;SSL=true",
+                  SQL_NTS, out, sizeof(out), &out_len, SQL_DRIVER_NOPROMPT),
+              SQL_SUCCESS);
+    ASSERT_TRUE(out_len > 0);
+
+    /* The connection config should reflect the parsed string. */
+    trino_conn_t *conn = (trino_conn_t *)dbc;
+    ASSERT_TRUE(conn->connected);
+    ASSERT_STREQ((char *)conn->server, "trino.example.com");
+    ASSERT_EQ(conn->port, 8443);
+    ASSERT_STREQ((char *)conn->user, "bob");
+    ASSERT_TRUE(conn->ssl_enabled);
+
+    /* Disconnecting twice: first succeeds, second reports not-open. */
+    ASSERT_EQ(SQLDisconnect(dbc), SQL_SUCCESS);
+    ASSERT_EQ(SQLDisconnect(dbc), SQL_ERROR);
+
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+}
+
+/* SQLConnect connects with a host + user + password (PASSWORD auth). */
+TEST(e2e_sqlconnect)
+{
+    SQLHENV env; SQLHDBC dbc;
+    ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
+    ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
+
+    ASSERT_EQ(SQLConnect(dbc,
+                  (SQLCHAR *)"trino.example.com:9090", SQL_NTS,
+                  (SQLCHAR *)"alice", SQL_NTS,
+                  (SQLCHAR *)"secret", SQL_NTS),
+              SQL_SUCCESS);
+
+    trino_conn_t *conn = (trino_conn_t *)dbc;
+    ASSERT_TRUE(conn->connected);
+    ASSERT_STREQ((char *)conn->server, "trino.example.com");
+    ASSERT_EQ(conn->port, 9090);
+    ASSERT_STREQ((char *)conn->user, "alice");
+    ASSERT_STREQ((char *)conn->auth_type, "PASSWORD");
+
+    ASSERT_EQ(SQLDisconnect(dbc), SQL_SUCCESS);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+}
+
 int main(void)
 {
     printf("Running Trino ODBC Driver end-to-end tests...\n\n");
 
+    test_e2e_driver_connect_disconnect();
+    test_e2e_sqlconnect();
     test_e2e_select_single_page();
     test_e2e_select_multi_page();
     test_e2e_getdata_typed();

@@ -57,6 +57,28 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
 
 ---
 
+### P0.5 — Implement SQLConnect / SQLDriverConnect / SQLDisconnect
+- **Problem:** The driver implements no connection entry points — there is no
+  `SQLConnect`, `SQLDriverConnect`, or `SQLDisconnect` exported. A real ODBC
+  Driver Manager (unixODBC/iODBC) connects exclusively through these, so the
+  driver cannot be opened by any DM-based application despite the connection
+  parsing/lifecycle logic existing internally (`trino_conn_connect`,
+  `trino_parse_conn_string`). (Discovered while building the end-to-end tests,
+  which had to call `trino_conn_connect` directly.)
+- **Fix:** Add the standard entry points:
+  - `SQLConnect(dbc, dsn, ..., user, ..., auth, ...)` — look up the DSN (via the
+    DM/odbc.ini) or treat it as a server, build a `trino_conn_config_t`, call
+    `trino_conn_connect`.
+  - `SQLDriverConnect(dbc, hwnd, inConnStr, ..., outConnStr, ..., completion)` —
+    parse the full connection string with `trino_parse_conn_string`, connect,
+    and write back the completed connection string.
+  - `SQLDisconnect(dbc)` — wrap `trino_conn_disconnect`.
+  - Wire these into `SQLGetFunctions` (already advertises `SQLConnect`/
+    `SQLDisconnect`/`SQLDriverConnect`).
+- **Files:** new `src/connection/connect.c` (or extend `connection.c`),
+  `src/connection/info.c` (SQLGetFunctions already lists them).
+- **Effort:** Medium. Required for any real DM usage.
+
 ## P1 — Correctness & safety (needed before trusting in production)
 
 ### P1.1 — Reuse one HTTP client per connection

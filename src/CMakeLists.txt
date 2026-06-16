@@ -7,6 +7,7 @@ set(CORE_SOURCES
 
 set(CONNECTION_SOURCES
     ${CMAKE_SOURCE_DIR}/src/connection/connection.c
+    ${CMAKE_SOURCE_DIR}/src/connection/connect.c
     ${CMAKE_SOURCE_DIR}/src/connection/connection_pool.c
     ${CMAKE_SOURCE_DIR}/src/connection/info.c
 )

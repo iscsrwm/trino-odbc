@@ -77,7 +77,7 @@ typedef struct {
  * HTTP Client
  * ======================================================================== */
 
-typedef struct {
+typedef struct trino_http_client_s {
     CURL          *easy_handle;
     CURLSH       *share_handle;   /* shared handle for connection reuse */
 

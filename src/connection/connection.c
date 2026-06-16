@@ -134,6 +134,11 @@ void trino_conn_destroy(trino_conn_t *conn)
         trino_conn_disconnect(conn);
     }
 
+    if (conn->http_client) {
+        trino_http_client_destroy(conn->http_client);
+        conn->http_client = NULL;
+    }
+
     free(conn->server);
     free(conn->user);
     free(conn->password);
@@ -202,6 +207,12 @@ SQLRETURN trino_conn_disconnect(trino_conn_t *conn)
 
     pthread_mutex_lock(&conn->mutex);
     conn->connected = false;
+    /* Drop the cached HTTP client so a subsequent reconnect rebuilds it with
+     * the new configuration. */
+    if (conn->http_client) {
+        trino_http_client_destroy(conn->http_client);
+        conn->http_client = NULL;
+    }
     pthread_mutex_unlock(&conn->mutex);
 
     return SQL_SUCCESS;
@@ -307,8 +318,15 @@ SQLRETURN trino_conn_get_attr(trino_conn_t *conn, SQLINTEGER attr,
 
 trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
 {
-    /* In a full implementation, this would return a cached/pooled HTTP client.
-     * For now, we create one on demand. */
+    if (!conn) return NULL;
+
+    /* Return the cached client if it has already been created. The client is
+     * owned by the connection and reused across statements/pages so that the
+     * underlying TCP/TLS connection (and curl handle) can be reused. */
+    if (conn->http_client) {
+        return conn->http_client;
+    }
+
     trino_http_client_t *client = trino_http_client_create();
     if (!client) return NULL;
 
@@ -328,6 +346,7 @@ trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
         return NULL;
     }
 
+    conn->http_client = client;
     return client;
 }
 

@@ -82,10 +82,12 @@ SQLRETURN SQLAllocHandle(SQLSMALLINT handle_type, SQLHANDLE input_handle,
 
             handle_slot_t *slot = handle_pool_alloc();
             if (!slot) {
+                /* Pool exhausted: tear down the env we just built. We cannot
+                 * report a diagnostic on it since there is no handle to return
+                 * to the application. */
+                pthread_mutex_destroy(&env->mutex);
                 free(env);
                 pthread_mutex_unlock(&g_pool_mutex);
-                trino_diag_set_error(&env->diagnostics,
-                    TRINO_SQLSTATE_MEMORY_ALLOCATION, 0, "Handle pool exhausted");
                 return SQL_ERROR;
             }
             slot->ptr = (void *)env;
