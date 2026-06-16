@@ -76,6 +76,9 @@ set_target_properties(trino_odbc PROPERTIES
     SOVERSION ${PROJECT_VERSION_MAJOR}
     POSITION_INDEPENDENT_CODE ON
     OUTPUT_NAME trino_odbc
+    # On Windows, export all symbols so the ODBC entry points (SQL*) are
+    # visible to the driver manager without a hand-maintained .def file.
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
 # Compiler warnings. MSVC uses a different flag set than GCC/Clang.

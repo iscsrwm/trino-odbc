@@ -1,4 +1,5 @@
 #include "trino_odbc/connection.h"
+#include "trino_odbc/compat.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

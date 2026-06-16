@@ -1,6 +1,9 @@
 #include "trino_odbc/auth.h"
+#include "trino_odbc/compat.h"
 #include <string.h>
+#ifndef _WIN32
 #include <strings.h>
+#endif
 
 trino_auth_method_t trino_auth_parse(const char *auth_type)
 {

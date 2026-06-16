@@ -23,6 +23,16 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+/* On Windows the SDK's <sqltypes.h> depends on Windows types (DWORD, GUID,
+ * HWND, ...) and must be preceded by <windows.h>; on POSIX (unixODBC/iODBC)
+ * there is no such dependency. WIN32_LEAN_AND_MEAN trims the heavy includes. */
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 /* Standard ODBC headers from the driver manager. */
 #include <sql.h>
 #include <sqlext.h>
