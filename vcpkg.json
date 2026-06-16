@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "trino-odbc",
+  "version-string": "1.0.0",
+  "description": "Trino ODBC driver - native dependencies for the Windows build",
+  "dependencies": [
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": ["ssl"]
+    },
+    "json-c"
+  ]
+}

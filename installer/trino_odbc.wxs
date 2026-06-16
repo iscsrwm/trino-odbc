@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX (v4/v5) installer definition for the Trino ODBC driver (64-bit).
+
+  This produces an MSI that:
+    * installs trino_odbc.dll and its runtime dependencies into
+      "Program Files\TrinoODBC\bin",
+    * registers the driver with the ODBC subsystem via the <ODBCDriver>
+      element (which calls SQLInstallDriverEx / SQLConfigDriver under the
+      hood - the correct, uninstall-safe way to register an ODBC driver),
+    * supports clean major-upgrade and uninstall.
+
+  Build:
+    wix build installer/trino_odbc.wxs -arch x64 ^
+        -d BinDir=build-windows/src/Release ^
+        -o trino_odbc-x64.msi
+
+  The BinDir preprocessor variable points at the directory containing the
+  built DLLs (driver + curl + json-c, etc.).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Trino ODBC Driver"
+           Manufacturer="Trino ODBC"
+           Version="1.0.0.0"
+           UpgradeCode="7C3D9E54-1E2B-4F8A-9C5D-2A6B7E0F1234"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <!-- Block downgrades; allow in-place major upgrades. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of the Trino ODBC Driver is already installed." />
+
+    <!-- Single embedded cab. -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- 64-bit Program Files. -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="TrinoODBC">
+        <Directory Id="BINFOLDER" Name="bin" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Trino ODBC Driver" Level="1">
+      <ComponentGroupRef Id="DriverComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="DriverComponents" Directory="BINFOLDER">
+      <!-- The driver DLL plus the ODBC driver registration. -->
+      <Component Id="DriverDll" Bitness="always64" Guid="*">
+        <File Id="trino_odbc.dll"
+              Source="$(var.BinDir)\trino_odbc.dll"
+              KeyPath="yes">
+          <!-- Registers the driver with the ODBC subsystem. The attributes
+               mirror windows/install.reg. -->
+          <ODBCDriver Id="TrinoODBCDriver" Name="Trino ODBC Driver">
+            <Property Id="APILevel" Value="1" />
+            <Property Id="ConnectFunctions" Value="YYN" />
+            <Property Id="DriverODBCVer" Value="03.80" />
+            <Property Id="SQLLevel" Value="1" />
+          </ODBCDriver>
+        </File>
+      </Component>
+
+      <!--
+        Runtime dependency DLLs. These file names depend on how the driver is
+        linked. If you static-link curl/json-c, remove these components. If the
+        DLL names differ in your vcpkg build (e.g. libcurl.dll vs curl.dll),
+        adjust the Source/Name accordingly; the harvested set can also be
+        generated with `wix harvest`.
+      -->
+      <Component Id="CurlDll" Bitness="always64" Guid="*" Condition="DEPS_BUNDLED">
+        <File Source="$(var.BinDir)\libcurl.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="JsonCDll" Bitness="always64" Guid="*" Condition="DEPS_BUNDLED">
+        <File Source="$(var.BinDir)\json-c.dll" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

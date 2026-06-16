@@ -19,11 +19,18 @@ option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer
 find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
 
-# cJSON for JSON parsing
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSON_C REQUIRED json-c)
-include_directories(${JSON_C_INCLUDE_DIRS})
-link_libraries(${JSON_C_LIBRARIES})
+# json-c for JSON parsing. Prefer the CMake package config (how vcpkg and newer
+# distros ship it); fall back to pkg-config (typical on Linux distro packages).
+find_package(json-c CONFIG QUIET)
+if(json-c_FOUND)
+    set(JSON_C_TARGET json-c::json-c)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(JSON_C REQUIRED json-c)
+    include_directories(${JSON_C_INCLUDE_DIRS})
+    link_directories(${JSON_C_LIBRARY_DIRS})
+    set(JSON_C_TARGET ${JSON_C_LIBRARIES})
+endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)

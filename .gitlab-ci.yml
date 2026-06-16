@@ -7,6 +7,7 @@
 stages:
   - build
   - analyze
+  - package
 
 default:
   image: debian:bookworm
@@ -91,3 +92,25 @@ clang-tidy:
     - cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     - cmake --build build -j "$(nproc)" --target trino_odbc
     - find src -name '*.c' | xargs clang-tidy -p build --warnings-as-errors='*'
+
+# Build the 64-bit Windows MSI installer. Runs on a Windows runner (tag
+# "windows") with MSVC, CMake, vcpkg and the WiX Toolset available. Manual and
+# tag-gated so the main pipeline does not require a Windows runner to be
+# present. Publishes trino_odbc-x64.msi as a pipeline artifact.
+windows-msi:
+  stage: package
+  tags:
+    - windows
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+      allow_failure: true
+    - when: manual
+      allow_failure: true
+  before_script: []
+  script:
+    - powershell -ExecutionPolicy Bypass -File installer/build_msi.ps1
+  artifacts:
+    paths:
+      - trino_odbc-x64.msi
+    expire_in: 30 days

@@ -63,7 +63,12 @@ add_library(trino_odbc SHARED
 )
 
 # Link dependencies
-target_link_libraries(trino_odbc PRIVATE CURL::libcurl Threads::Threads)
+target_link_libraries(trino_odbc PRIVATE CURL::libcurl Threads::Threads ${JSON_C_TARGET})
+
+# On Windows, an ODBC driver links the ODBC import libraries.
+if(WIN32)
+    target_link_libraries(trino_odbc PRIVATE odbc32 odbccp32)
+endif()
 
 # Set library properties
 set_target_properties(trino_odbc PROPERTIES
@@ -73,8 +78,14 @@ set_target_properties(trino_odbc PROPERTIES
     OUTPUT_NAME trino_odbc
 )
 
-# Compiler warnings
-target_compile_options(trino_odbc PRIVATE -Wall -Wextra -Wpedantic)
+# Compiler warnings. MSVC uses a different flag set than GCC/Clang.
+if(MSVC)
+    target_compile_options(trino_odbc PRIVATE /W3)
+    # ODBC headers and our code use standard C string functions.
+    target_compile_definitions(trino_odbc PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(trino_odbc PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # Public headers
 target_include_directories(trino_odbc PUBLIC
