@@ -571,6 +571,47 @@ TEST(e2e_getdata_wchar_truncation)
     trino_http_set_test_transport(NULL, NULL);
 }
 
+/* SQLGetData parses a decimal string into SQL_NUMERIC_STRUCT (sign, scale,
+ * precision, little-endian mantissa). */
+TEST(e2e_getdata_numeric)
+{
+    const char *responses[] = {
+        "{\"id\":\"q11\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
+        "{\"id\":\"q11\","
+        "\"columns\":[{\"name\":\"d\",\"type\":\"decimal(5,2)\"}],"
+        "\"data\":[[\"-123.45\"]],"
+        "\"stats\":{\"state\":\"FINISHED\"}}",
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
+    trino_http_set_test_transport(mock_transport, &script);
+
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
+    ASSERT_TRUE(stmt != NULL);
+
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT d FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
+
+    SQL_NUMERIC_STRUCT num;
+    memset(&num, 0xAB, sizeof(num));
+    SQLLEN ind = 0;
+    ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_NUMERIC, &num, sizeof(num), &ind), SQL_SUCCESS);
+    ASSERT_EQ(num.sign, 0);      /* negative */
+    ASSERT_EQ(num.scale, 2);     /* two fractional digits */
+    ASSERT_EQ(num.precision, 5); /* 12345 -> 5 significant digits */
+    /* Mantissa 12345 == 0x3039, little-endian. */
+    ASSERT_EQ(num.val[0], 0x39);
+    ASSERT_EQ(num.val[1], 0x30);
+    ASSERT_EQ(num.val[2], 0x00);
+    ASSERT_EQ(num.val[15], 0x00);
+
+    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
+}
+
 int main(void)
 {
     printf("Running Trino ODBC Driver end-to-end tests...\n\n");
@@ -587,6 +628,7 @@ int main(void)
     test_e2e_getdata_truncation_and_range();
     test_e2e_getdata_wchar();
     test_e2e_getdata_wchar_truncation();
+    test_e2e_getdata_numeric();
 
     printf("\n========================================\n");
     printf("Tests run:    %d\n", tests_run);

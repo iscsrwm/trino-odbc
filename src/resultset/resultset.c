@@ -403,6 +403,73 @@ static bool parse_components(const char *value, const char *seps, int min, int m
     return n >= min;
 }
 
+/* Parse a decimal string (e.g. "-123.45") into a SQL_NUMERIC_STRUCT: sign,
+ * scale (fractional digit count), precision (significant digit count) and a
+ * 16-byte little-endian unscaled mantissa. Returns false on malformed input or
+ * if the mantissa exceeds 16 bytes. */
+static bool parse_numeric(const char *value, SQL_NUMERIC_STRUCT *out)
+{
+    const char *p = value;
+    while (*p == ' ' || *p == '\t')
+        p++;
+
+    unsigned char sign = 1; /* 1 = positive, 0 = negative */
+    if (*p == '+') {
+        p++;
+    } else if (*p == '-') {
+        sign = 0;
+        p++;
+    }
+
+    unsigned char mant[SQL_MAX_NUMERIC_LEN] = {0};
+    int digits = 0; /* total significant digits accumulated */
+    int scale = 0;  /* digits after the decimal point */
+    bool seen_dot = false;
+    bool any = false;
+
+    for (; *p; p++) {
+        if (*p == '.') {
+            if (seen_dot)
+                return false; /* two decimal points */
+            seen_dot = true;
+            continue;
+        }
+        if (*p < '0' || *p > '9') {
+            /* Allow trailing whitespace only. */
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (*p != '\0')
+                return false;
+            break;
+        }
+        any = true;
+
+        /* mant = mant * 10 + digit, as a little-endian byte big-integer. */
+        unsigned int carry = (unsigned int)(*p - '0');
+        for (int i = 0; i < SQL_MAX_NUMERIC_LEN; i++) {
+            unsigned int prod = (unsigned int)mant[i] * 10u + carry;
+            mant[i] = (unsigned char)(prod & 0xFF);
+            carry = prod >> 8;
+        }
+        if (carry != 0)
+            return false; /* overflow beyond 16 bytes */
+
+        digits++;
+        if (seen_dot)
+            scale++;
+    }
+
+    if (!any)
+        return false;
+
+    out->sign = sign;
+    out->scale = (SQLSCHAR)scale;
+    /* Precision is the count of significant digits (at least 1). */
+    out->precision = (SQLCHAR)(digits > 0 ? digits : 1);
+    memcpy(out->val, mant, SQL_MAX_NUMERIC_LEN);
+    return true;
+}
+
 SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
                                    SQLSMALLINT C_type, SQLPOINTER buffer,
                                    SQLBUFFER_LENGTH buffer_length, SQLLEN *str_len_or_ind)
@@ -565,6 +632,18 @@ SQLRETURN trino_resultset_get_data(trino_resultset_t *rs, SQLUSMALLINT col,
             *(SQLDOUBLE *)buffer = (SQLDOUBLE)v;
             if (str_len_or_ind)
                 *str_len_or_ind = (SQLLEN)sizeof(SQLDOUBLE);
+            return SQL_SUCCESS;
+        }
+
+        case SQL_C_NUMERIC: {
+            if (!buffer)
+                return SQL_ERROR;
+            SQL_NUMERIC_STRUCT num = {0};
+            if (!parse_numeric(value, &num))
+                return SQL_ERROR;
+            *(SQL_NUMERIC_STRUCT *)buffer = num;
+            if (str_len_or_ind)
+                *str_len_or_ind = (SQLLEN)sizeof(SQL_NUMERIC_STRUCT);
             return SQL_SUCCESS;
         }
 

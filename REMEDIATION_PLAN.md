@@ -100,10 +100,10 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
   return `SQL_ERROR`; character/binary truncation returns `SQL_SUCCESS_WITH_INFO`
   and sets SQLSTATE `01004`. Covered by e2e tests.
 - **Files:** `src/resultset/resultset.c`.
-- **Update:** `SQL_C_WCHAR` now performs proper UTF-8 -> UTF-16 conversion
-  (via `trino_utf8_to_wchars`), reports the length in bytes, truncates on a
-  wide-character boundary, and NUL-terminates. `SQL_C_NUMERIC` struct output is
-  still approximate (falls back to string).
+- **Update:** the `SQLGetData` conversion matrix is now complete — char, wchar
+  (UTF-8 -> UTF-16), binary, all signed/unsigned integer widths, float/double,
+  bit, date/time/timestamp, and `SQL_C_NUMERIC` (decimal string parsed into
+  sign/scale/precision + little-endian mantissa).
 
 ### P1.3 — Harden write-op detection
 - **Problem:** `src/statement/statement.c:182` uses case-sensitive `strncmp`;
