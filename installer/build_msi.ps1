@@ -34,6 +34,35 @@ if (-not $env:VCPKG_ROOT) {
     throw "VCPKG_ROOT is not set. Install vcpkg and set VCPKG_ROOT to its path."
 }
 
+# Ensure the MSVC build environment is loaded (cl.exe + ninja on PATH). If not,
+# locate Visual Studio with vswhere and import its developer environment so this
+# works from a plain PowerShell too, not only an "x64 Native Tools" shell.
+if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+    Write-Host "==> MSVC not on PATH; loading Visual Studio developer environment"
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path $vswhere)) {
+        throw "Could not find vswhere. Open an 'x64 Native Tools Command Prompt for VS' and re-run, or install Visual Studio Build Tools."
+    }
+    $vsPath = & $vswhere -latest -products * `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath
+    if (-not $vsPath) { throw "No Visual Studio with the C++ toolset was found." }
+
+    # Import the dev environment from VsDevCmd into this PowerShell session.
+    $devCmd = Join-Path $vsPath "Common7\Tools\VsDevCmd.bat"
+    cmd /c "`"$devCmd`" -arch=x64 -host_arch=x64 && set" | ForEach-Object {
+        if ($_ -match '^(.*?)=(.*)$') { Set-Item -Path "env:$($matches[1])" -Value $matches[2] }
+    }
+    if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+        throw "Failed to load the MSVC environment (cl.exe still not found)."
+    }
+}
+
+# Keep the vcpkg manifest baseline in sync with the local vcpkg checkout so
+# dependency resolution does not fail with "<pkg> does not exist".
+Write-Host "==> Updating vcpkg baseline"
+& "$env:VCPKG_ROOT\vcpkg.exe" x-update-baseline 2>&1 | Out-Host
+
 Write-Host "==> Configuring (CMake preset: windows-x64)"
 cmake --preset windows-x64
 
