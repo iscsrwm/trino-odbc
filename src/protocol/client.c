@@ -11,6 +11,12 @@
 
 trino_http_client_t *trino_http_client_create(void)
 {
+    /* libcurl global state must be initialized before the first curl_easy_init.
+     * Without this, an HTTPS request on Windows/schannel crashes during TLS
+     * setup (access violation). */
+    if (trino_curl_global_ensure_init() != SQL_SUCCESS)
+        return NULL;
+
     trino_http_client_t *client = calloc(1, sizeof(*client));
     if (!client)
         return NULL;

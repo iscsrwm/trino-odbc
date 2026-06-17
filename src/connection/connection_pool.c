@@ -23,6 +23,7 @@ static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
 static CURLSH *g_share = NULL;
 static int g_refcount = 0;
 static bool g_locks_inited = false;
+static bool g_curl_global_inited = false;
 
 static void share_lock_cb(CURL *handle, curl_lock_data data, curl_lock_access access,
                           void *userptr)
@@ -42,8 +43,32 @@ static void share_unlock_cb(CURL *handle, curl_lock_data data, void *userptr)
         pthread_mutex_unlock(&g_share_locks[data]);
 }
 
+/* Initialize libcurl's global state exactly once before any easy/share handle
+ * is created. This MUST happen explicitly: libcurl's implicit lazy init is not
+ * thread-safe and, on Windows with the schannel TLS backend, performing an
+ * HTTPS request without a prior curl_global_init() crashes (access violation)
+ * during TLS setup. */
+SQLRETURN trino_curl_global_ensure_init(void)
+{
+    SQLRETURN ret = SQL_SUCCESS;
+    pthread_mutex_lock(&g_pool_mutex);
+    if (!g_curl_global_inited) {
+        if (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {
+            g_curl_global_inited = true;
+        } else {
+            ret = SQL_ERROR;
+        }
+    }
+    pthread_mutex_unlock(&g_pool_mutex);
+    return ret;
+}
+
 CURLSH *trino_http_pool_acquire(void)
 {
+    /* Guarantee global init before any share/easy handle is created. */
+    if (trino_curl_global_ensure_init() != SQL_SUCCESS)
+        return NULL;
+
     pthread_mutex_lock(&g_pool_mutex);
 
     if (g_share == NULL) {

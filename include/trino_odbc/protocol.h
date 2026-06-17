@@ -117,6 +117,11 @@ void trino_http_client_destroy(trino_http_client_t *client);
  * Thread-safe.
  * ------------------------------------------------------------------------ */
 
+/* Ensure libcurl's global state is initialized exactly once (thread-safe).
+ * Must be called before the first curl_easy_init / curl_easy_perform. Returns
+ * SQL_SUCCESS on success. */
+SQLRETURN trino_curl_global_ensure_init(void);
+
 /* Acquire the shared curl handle (initializing the pool on first use).
  * Returns NULL if the pool could not be created. */
 CURLSH *trino_http_pool_acquire(void);
