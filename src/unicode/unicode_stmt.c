@@ -44,7 +44,7 @@ static char *w_to_utf8(const SQLWCHAR *w, SQLSMALLINT len)
  * Environment attributes
  * ======================================================================== */
 
-SQLRETURN SQLSetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
+SQLRETURN SQL_API SQLSetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
                          SQLINTEGER str_len)
 {
     /* Environment attributes are all numeric (passed by value), with no string
@@ -52,7 +52,7 @@ SQLRETURN SQLSetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
     return SQLSetEnvAttr(env, attr, value, str_len);
 }
 
-SQLRETURN SQLGetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
+SQLRETURN SQL_API SQLGetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
                          SQLINTEGER buffer_length, SQLINTEGER *str_len)
 {
     /* Same reasoning as SQLSetEnvAttrW: no string attributes. */
@@ -63,7 +63,7 @@ SQLRETURN SQLGetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
  * Statement execution
  * ======================================================================== */
 
-SQLRETURN SQLExecDirectW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
+SQLRETURN SQL_API SQLExecDirectW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
 {
     char *utf8 = w_to_utf8(text, (text_len == SQL_NTS) ? SQL_NTS : (SQLSMALLINT)text_len);
     trino_log("SQLExecDirectW: sql=%s", utf8 ? utf8 : "(null)");
@@ -72,7 +72,7 @@ SQLRETURN SQLExecDirectW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
     return ret;
 }
 
-SQLRETURN SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
+SQLRETURN SQL_API SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
 {
     char *utf8 = w_to_utf8(text, (text_len == SQL_NTS) ? SQL_NTS : (SQLSMALLINT)text_len);
     SQLRETURN ret = SQLPrepare(stmt, (SQLCHAR *)utf8, utf8 ? SQL_NTS : 0);
@@ -84,8 +84,8 @@ SQLRETURN SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
  * Statement attributes
  * ======================================================================== */
 
-SQLRETURN SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
-                          SQLINTEGER str_len)
+SQLRETURN SQL_API SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
+                                   SQLINTEGER str_len)
 {
     /* Statement attributes are all numeric (passed by value) or pointer-typed
      * (row status arrays, bind offsets, etc.), with no string attributes, so
@@ -96,7 +96,7 @@ SQLRETURN SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
     return ret;
 }
 
-SQLRETURN SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
+SQLRETURN SQL_API SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
                           SQLINTEGER buffer_length, SQLINTEGER *str_len)
 {
     /* Same reasoning as SQLSetStmtAttrW: no string attributes. */
@@ -110,7 +110,7 @@ SQLRETURN SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
  * Column metadata
  * ======================================================================== */
 
-SQLRETURN SQLColAttributeW(SQLHSTMT stmt, SQLUSMALLINT col, SQLUSMALLINT field,
+SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT stmt, SQLUSMALLINT col, SQLUSMALLINT field,
                            SQLPOINTER char_attr, SQLSMALLINT buffer_length,
                            SQLSMALLINT *string_length, SQLLEN *numeric_attr)
 {
@@ -151,7 +151,7 @@ SQLRETURN SQLColAttributeW(SQLHSTMT stmt, SQLUSMALLINT col, SQLUSMALLINT field,
  * Catalog functions
  * ======================================================================== */
 
-SQLRETURN SQLTablesW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
+SQLRETURN SQL_API SQLTablesW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
                      SQLSMALLINT schl, SQLWCHAR *tbl, SQLSMALLINT tbll, SQLWCHAR *typ,
                      SQLSMALLINT typl)
 {
@@ -167,7 +167,7 @@ SQLRETURN SQLTablesW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *s
     return ret;
 }
 
-SQLRETURN SQLColumnsW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
+SQLRETURN SQL_API SQLColumnsW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
                       SQLSMALLINT schl, SQLWCHAR *tbl, SQLSMALLINT tbll, SQLWCHAR *col,
                       SQLSMALLINT coll)
 {
@@ -183,7 +183,7 @@ SQLRETURN SQLColumnsW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *
     return ret;
 }
 
-SQLRETURN SQLStatisticsW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
+SQLRETURN SQL_API SQLStatisticsW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
                          SQLSMALLINT schl, SQLWCHAR *tbl, SQLSMALLINT tbll,
                          SQLUSMALLINT unique, SQLUSMALLINT reserved)
 {
@@ -197,7 +197,7 @@ SQLRETURN SQLStatisticsW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHA
     return ret;
 }
 
-SQLRETURN SQLPrimaryKeysW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
+SQLRETURN SQL_API SQLPrimaryKeysW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCHAR *sch,
                           SQLSMALLINT schl, SQLWCHAR *tbl, SQLSMALLINT tbll)
 {
     char *c = w_to_utf8(cat, catl), *s = w_to_utf8(sch, schl), *t = w_to_utf8(tbl, tbll);
@@ -209,7 +209,7 @@ SQLRETURN SQLPrimaryKeysW(SQLHSTMT stmt, SQLWCHAR *cat, SQLSMALLINT catl, SQLWCH
     return ret;
 }
 
-SQLRETURN SQLSpecialColumnsW(SQLHSTMT stmt, SQLUSMALLINT id_type, SQLWCHAR *cat,
+SQLRETURN SQL_API SQLSpecialColumnsW(SQLHSTMT stmt, SQLUSMALLINT id_type, SQLWCHAR *cat,
                              SQLSMALLINT catl, SQLWCHAR *sch, SQLSMALLINT schl,
                              SQLWCHAR *tbl, SQLSMALLINT tbll, SQLUSMALLINT scope,
                              SQLUSMALLINT nullable)
