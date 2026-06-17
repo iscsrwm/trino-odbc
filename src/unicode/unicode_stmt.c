@@ -87,8 +87,10 @@ SQLRETURN SQL_API SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len
 SQLRETURN SQL_API SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
                                    SQLINTEGER str_len)
 {
+    /* Return SQL_ERROR with option not implemented to signal .NET that
+     * this attribute setting should be skipped. */
     (void)stmt; (void)attr; (void)value; (void)str_len;
-    return SQL_SUCCESS;
+    return SQL_ERROR;
 }
 
 SQLRETURN SQL_API SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,

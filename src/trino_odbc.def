@@ -28,7 +28,7 @@ EXPORTS
     SQLGetConnectAttrW
     SQLSetStmtAttr
     SQLGetStmtAttr
-    ; SQLSetStmtAttrW - Commented out due to .NET access violation issue
+    SQLSetStmtAttrW
     SQLGetStmtAttrW
     
     ; Statement execution
