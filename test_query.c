@@ -79,9 +79,13 @@ int main(int argc, char *argv[]) {
     printf("   OK: Connected\n\n");
     
     // 5. Allocate statement handle
-    printf("5. Allocating statement handle...\n");
+    printf("5. Allocating statement handle (dbc=%p)...\n", dbc);
     rc = SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt);
-    CHECK_ERROR(rc, SQL_HANDLE_STMT, stmt, "Failed to allocate statement");
+    printf("   SQLAllocHandle returned: %d (stmt=%p)\n", rc, stmt);
+    if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO) {
+        print_error(SQL_HANDLE_DBC, dbc, "Failed to allocate statement");
+        goto cleanup;
+    }
     printf("   OK: stmt=%p\n\n", stmt);
     
     // 6. Set query timeout (tests SQLSetStmtAttrW)
