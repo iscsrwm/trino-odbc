@@ -34,6 +34,23 @@ if (-not $env:VCPKG_ROOT) {
     throw "VCPKG_ROOT is not set. Install vcpkg and set VCPKG_ROOT to its path."
 }
 
+# --------------------------------------------------------------------------
+# Corporate TLS-inspection proxies present a self-signed root CA that git and
+# vcpkg's curl reject ("SSL certificate ... self-signed certificate in
+# certificate chain"). That breaks the vcpkg registry fetch (git) and the
+# dependency install, so configure aborts before anything is built. Disable
+# TLS verification for the network tools used during the build.
+#
+# INSECURE: this skips certificate validation and is only appropriate on a
+# machine that sits behind a trusted corporate proxy. GIT_SSL_NO_VERIFY is
+# process-scoped (it does not mutate the machine-wide git config), and
+# VCPKG_KEEP_ENV_VARS ensures vcpkg forwards it to the git subprocesses it
+# spawns to fetch its registry.
+# --------------------------------------------------------------------------
+Write-Warning "TLS certificate verification is DISABLED for git/vcpkg during this build (corporate proxy workaround)."
+$env:GIT_SSL_NO_VERIFY   = "true"
+$env:VCPKG_KEEP_ENV_VARS = "GIT_SSL_NO_VERIFY"
+
 # Ensure the MSVC build environment is loaded (cl.exe + ninja on PATH). If not,
 # locate Visual Studio with vswhere and import its developer environment so this
 # works from a plain PowerShell too, not only an "x64 Native Tools" shell.
