@@ -88,10 +88,38 @@ int main(int argc, char *argv[]) {
     }
     printf("   OK: stmt=%p\n\n", stmt);
     
-    // 6. Set query timeout (tests SQLSetStmtAttrW)
+    // 6. Set query timeout (tests SQLSetStmtAttrW) 
     printf("6. Setting query timeout...\n");
     fflush(stdout);
-    printf("   About to call SQLSetStmtAttr...\n");
+    
+    // Try calling the W function directly
+    printf("   Calling SQLSetStmtAttrW directly...\n");
+    fflush(stdout);
+    
+    // Declare the W function
+    typedef SQLRETURN (SQL_API *SQLSetStmtAttrWFunc)(SQLHSTMT, SQLINTEGER, SQLPOINTER, SQLINTEGER);
+    HMODULE hDll = LoadLibraryA("C:\\Program Files\\TrinoODBC\\bin\\trino_odbc.dll");
+    if (hDll) {
+        printf("   DLL loaded successfully\n");
+        fflush(stdout);
+        SQLSetStmtAttrWFunc pFunc = (SQLSetStmtAttrWFunc)GetProcAddress(hDll, "SQLSetStmtAttrW");
+        if (pFunc) {
+            printf("   SQLSetStmtAttrW function found, calling it...\n");
+            fflush(stdout);
+            rc = pFunc(stmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)30, 0);
+            printf("   SQLSetStmtAttrW returned: %d\n", rc);
+            fflush(stdout);
+        } else {
+            printf("   SQLSetStmtAttrW NOT FOUND in DLL! Error: %d\n", GetLastError());
+            fflush(stdout);
+        }
+        FreeLibrary(hDll);
+    } else {
+        printf("   Failed to load DLL! Error: %d\n", GetLastError());
+        fflush(stdout);
+    }
+    
+    printf("   Now calling through DM: SQLSetStmtAttr...\n");
     fflush(stdout);
     rc = SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)30, 0);
     printf("   SQLSetStmtAttr returned: %d\n", rc);
