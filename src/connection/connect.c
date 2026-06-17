@@ -6,11 +6,29 @@
  * connection.c.
  */
 #include "trino_odbc/connection.h"
+#include "trino_odbc/protocol.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
 #include <limits.h>
+
+/* Convert an ODBC wide-string argument (SQLWCHAR*, possibly SQL_NTS or
+ * length-delimited in characters) into a freshly allocated UTF-8 C string.
+ * Returns NULL for a NULL input. Caller frees. */
+static char *odbc_wstrdup_utf8(const SQLWCHAR *wstr, SQLSMALLINT len)
+{
+    if (!wstr)
+        return NULL;
+    size_t wlen = (len == SQL_NTS) ? trino_wstrlen(wstr) : (len < 0 ? 0 : (size_t)len);
+    if (wlen == 0) {
+        char *empty = malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+    return trino_wchars_to_utf8(wstr, wlen);
+}
 
 /* Resolve an ODBC string argument that may be NUL-terminated (SQL_NTS) or
  * length-delimited into a freshly allocated NUL-terminated C string. Returns
@@ -184,4 +202,77 @@ SQLRETURN SQLDisconnect(SQLHDBC connection_handle)
     }
 
     return trino_conn_disconnect(conn);
+}
+
+/* ========================================================================
+ * Unicode (W) variants. The Windows ODBC Driver Manager calls the W-suffixed
+ * entry points when the application uses the Unicode ODBC API (.NET's
+ * OdbcConnection does). We convert the UTF-16 arguments to UTF-8 and delegate
+ * to the ANSI implementations above, then convert any echoed-back string
+ * (SQLDriverConnectW's out_conn_str) back to UTF-16.
+ * ======================================================================== */
+
+SQLRETURN SQLConnectW(SQLHDBC connection_handle, SQLWCHAR *server_name,
+                      SQLSMALLINT name_length1, SQLWCHAR *user_name,
+                      SQLSMALLINT name_length2, SQLWCHAR *authentication,
+                      SQLSMALLINT name_length3)
+{
+    char *server = odbc_wstrdup_utf8(server_name, name_length1);
+    char *user = odbc_wstrdup_utf8(user_name, name_length2);
+    char *auth = odbc_wstrdup_utf8(authentication, name_length3);
+
+    SQLRETURN ret = SQLConnect(
+        connection_handle, (SQLCHAR *)server, server ? SQL_NTS : 0, (SQLCHAR *)user,
+        user ? SQL_NTS : 0, (SQLCHAR *)auth, auth ? SQL_NTS : 0);
+
+    free(server);
+    free(user);
+    free(auth);
+    return ret;
+}
+
+SQLRETURN SQLDriverConnectW(SQLHDBC connection_handle, SQLHWND window_handle,
+                            SQLWCHAR *in_conn_str, SQLSMALLINT in_conn_str_len,
+                            SQLWCHAR *out_conn_str, SQLSMALLINT out_conn_str_max,
+                            SQLSMALLINT *out_conn_str_len,
+                            SQLUSMALLINT driver_completion)
+{
+    char *in_utf8 = odbc_wstrdup_utf8(in_conn_str, in_conn_str_len);
+
+    /* Collect the ANSI completed string into a local buffer, then widen it. */
+    char ansi_out[2048];
+    SQLSMALLINT ansi_out_len = 0;
+    SQLRETURN ret = SQLDriverConnect(
+        connection_handle, window_handle, (SQLCHAR *)in_utf8, in_utf8 ? SQL_NTS : 0,
+        (SQLCHAR *)ansi_out, (SQLSMALLINT)sizeof(ansi_out), &ansi_out_len,
+        driver_completion);
+
+    free(in_utf8);
+
+    if (ret == SQL_ERROR || ret == SQL_INVALID_HANDLE)
+        return ret;
+
+    /* Widen the echoed connection string back to UTF-16 for the caller. */
+    if (ansi_out_len > 0) {
+        size_t wlen = 0;
+        SQLWCHAR *wout = trino_utf8_to_wchars(ansi_out, &wlen);
+        if (out_conn_str && out_conn_str_max > 0) {
+            size_t copy = wlen;
+            if (copy > (size_t)(out_conn_str_max - 1)) {
+                copy = (size_t)(out_conn_str_max - 1);
+                ret = SQL_SUCCESS_WITH_INFO;
+            }
+            if (wout && copy > 0)
+                memcpy(out_conn_str, wout, copy * sizeof(SQLWCHAR));
+            if (out_conn_str)
+                out_conn_str[copy] = 0;
+        }
+        if (out_conn_str_len)
+            *out_conn_str_len = (SQLSMALLINT)wlen;
+        free(wout);
+    } else if (out_conn_str_len) {
+        *out_conn_str_len = 0;
+    }
+
+    return ret;
 }

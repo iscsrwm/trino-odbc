@@ -8,7 +8,9 @@
 
 #include "trino_odbc/core.h"
 #include "trino_odbc/error.h"
+#include "trino_odbc/protocol.h"
 #include <string.h>
+#include <stdlib.h>
 
 /* Resolve the diagnostics block for any handle. All handle structs begin with
  * a trino_handle_type_t `type` field, so we can dispatch on it. */
@@ -76,6 +78,65 @@ SQLRETURN SQLGetDiagRec(SQLSMALLINT handle_type, SQLHANDLE handle, SQLSMALLINT r
     if (text_length)
         *text_length = msg_len;
     return SQL_SUCCESS;
+}
+
+/* ========================================================================
+ * SQLGetDiagRecW — Unicode variant. The Windows ODBC Driver Manager calls the
+ * W-suffixed entry points when the application uses the Unicode ODBC API
+ * (.NET's OdbcConnection does). Without this export, the DM has no way to read
+ * the driver's diagnostics and surfaces failures as an empty error message.
+ *
+ * SQLSTATE and the message are converted from the driver's internal UTF-8/ASCII
+ * storage to UTF-16. buffer_length and *text_length are expressed in characters
+ * (SQLWCHAR), per the ODBC spec for the W variants.
+ * ======================================================================== */
+
+SQLRETURN SQLGetDiagRecW(SQLSMALLINT handle_type, SQLHANDLE handle, SQLSMALLINT rec_number,
+                         SQLWCHAR *sqlstate, SQLINTEGER *native_error,
+                         SQLWCHAR *message_text, SQLSMALLINT buffer_length,
+                         SQLSMALLINT *text_length)
+{
+    if (rec_number < 1)
+        return SQL_ERROR;
+
+    trino_diagnostics_t *diag = diag_for_handle(handle_type, handle);
+    if (!diag)
+        return SQL_INVALID_HANDLE;
+
+    if (rec_number > diag->record_count)
+        return SQL_NO_DATA;
+
+    trino_diag_record_t *rec = &diag->records[rec_number - 1];
+
+    /* SQLSTATE is always 5 ASCII chars; widen them directly. */
+    if (sqlstate) {
+        for (int i = 0; i < 5; i++)
+            sqlstate[i] = (SQLWCHAR)rec->sqlstate[i];
+        sqlstate[5] = 0;
+    }
+    if (native_error)
+        *native_error = rec->native_error;
+
+    /* Convert the message (UTF-8) to UTF-16 and report length in characters. */
+    size_t wlen = 0;
+    SQLWCHAR *wmsg = trino_utf8_to_wchars((const char *)rec->message_text, &wlen);
+    SQLRETURN ret = SQL_SUCCESS;
+
+    if (message_text && buffer_length > 0) {
+        size_t copy = wlen;
+        if (copy > (size_t)(buffer_length - 1))
+            copy = (size_t)(buffer_length - 1);
+        if (wmsg && copy > 0)
+            memcpy(message_text, wmsg, copy * sizeof(SQLWCHAR));
+        message_text[copy] = 0;
+        if ((size_t)wlen > copy)
+            ret = SQL_SUCCESS_WITH_INFO;
+    }
+    if (text_length)
+        *text_length = (SQLSMALLINT)wlen;
+
+    free(wmsg);
+    return ret;
 }
 
 /* ========================================================================
