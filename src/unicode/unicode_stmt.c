@@ -1,17 +1,19 @@
-/* Unicode (W) variants of the statement and catalog ODBC entry points.
+/* Unicode (W) variants of the environment, connection, statement, and catalog
+ * ODBC entry points.
  *
  * Once the driver exports any W function, the Windows ODBC Driver Manager
  * treats the driver as Unicode and calls the W-suffixed entry points
  * exclusively. .NET's OdbcCommand therefore calls SQLExecDirectW, SQLPrepareW,
- * SQLColAttributeW, and the catalog W functions. Without these exports the DM
- * fails query execution (often surfaced as a misleading "unable to allocate an
- * environment handle" error).
+ * SQLColAttributeW, SQLSetStmtAttrW, and the catalog W functions. Without these
+ * exports the DM fails query execution (often surfaced as a misleading "unable
+ * to allocate an environment handle" error).
  *
  * Each wrapper converts its UTF-16 string arguments to UTF-8 and delegates to
  * the existing ANSI implementation. For functions that return character data
  * (SQLColAttributeW), the ANSI result is widened back to UTF-16; per the ODBC
  * convention for the W variants, character buffer lengths and returned string
- * lengths are expressed in bytes.
+ * lengths are expressed in bytes. Attribute functions with no string parameters
+ * (Set/GetEnvAttr, Set/GetStmtAttr) delegate directly.
  */
 
 #include "trino_odbc/core.h"
@@ -39,6 +41,25 @@ static char *w_to_utf8(const SQLWCHAR *w, SQLSMALLINT len)
 }
 
 /* ========================================================================
+ * Environment attributes
+ * ======================================================================== */
+
+SQLRETURN SQLSetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
+                         SQLINTEGER str_len)
+{
+    /* Environment attributes are all numeric (passed by value), with no string
+     * attributes, so delegate directly to the ANSI version. */
+    return SQLSetEnvAttr(env, attr, value, str_len);
+}
+
+SQLRETURN SQLGetEnvAttrW(SQLHENV env, SQLINTEGER attr, SQLPOINTER value,
+                         SQLINTEGER buffer_length, SQLINTEGER *str_len)
+{
+    /* Same reasoning as SQLSetEnvAttrW: no string attributes. */
+    return SQLGetEnvAttr(env, attr, value, buffer_length, str_len);
+}
+
+/* ========================================================================
  * Statement execution
  * ======================================================================== */
 
@@ -57,6 +78,26 @@ SQLRETURN SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
     SQLRETURN ret = SQLPrepare(stmt, (SQLCHAR *)utf8, utf8 ? SQL_NTS : 0);
     free(utf8);
     return ret;
+}
+
+/* ========================================================================
+ * Statement attributes
+ * ======================================================================== */
+
+SQLRETURN SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
+                          SQLINTEGER str_len)
+{
+    /* Statement attributes are all numeric (passed by value) or pointer-typed
+     * (row status arrays, bind offsets, etc.), with no string attributes, so
+     * delegate directly to the ANSI version. */
+    return SQLSetStmtAttr(stmt, attr, value, str_len);
+}
+
+SQLRETURN SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
+                          SQLINTEGER buffer_length, SQLINTEGER *str_len)
+{
+    /* Same reasoning as SQLSetStmtAttrW: no string attributes. */
+    return SQLGetStmtAttr(stmt, attr, value, buffer_length, str_len);
 }
 
 /* ========================================================================

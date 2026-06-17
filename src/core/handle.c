@@ -156,6 +156,7 @@ SQLRETURN SQLAllocHandle(SQLSMALLINT handle_type, SQLHANDLE input_handle,
             slot->ptr = (void *)stmt;
             slot->type = TRINO_HANDLE_STMT;
             *output_handle = (SQLHANDLE)stmt;
+            trino_log("SQLAllocHandle: STMT created stmt=%p", (void *)stmt);
             pthread_mutex_unlock(&g_pool_mutex);
             return SQL_SUCCESS;
         }
