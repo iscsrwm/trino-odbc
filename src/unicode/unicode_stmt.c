@@ -84,14 +84,16 @@ SQLRETURN SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len)
  * Statement attributes
  * ======================================================================== */
 
-SQLRETURN SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
-                          SQLINTEGER str_len)
+SQLRETURN SQL_API SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
+                                   SQLINTEGER str_len)
 {
     /* Statement attributes are all numeric (passed by value) or pointer-typed
      * (row status arrays, bind offsets, etc.), with no string attributes, so
      * delegate directly to the ANSI version. */
     trino_log("SQLSetStmtAttrW: entry attr=%d stmt=%p", (int)attr, (void *)stmt);
-    return SQLSetStmtAttr(stmt, attr, value, str_len);
+    SQLRETURN ret = SQLSetStmtAttr(stmt, attr, value, str_len);
+    trino_log("SQLSetStmtAttrW: exit ret=%d", ret);
+    return ret;
 }
 
 SQLRETURN SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
