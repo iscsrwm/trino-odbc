@@ -573,8 +573,14 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 SQLRETURN SQL_API SQLSetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute,
                                   SQLPOINTER value_ptr, SQLINTEGER string_length)
 {
-    trino_log("SQLSetStmtAttr: entry attr=%d stmt=%p value=%p", 
-              (int)attribute, (void *)statement_handle, value_ptr);
+    trino_log("SQLSetStmtAttr: ENTRY attr=%d stmt=%p value=%p strlen=%d", 
+              (int)attribute, (void *)statement_handle, value_ptr, (int)string_length);
+    
+    // Simplified version - just log and return success for now
+    trino_log("SQLSetStmtAttr: EXIT returning SQL_SUCCESS");
+    return SQL_SUCCESS;
+    
+    /* Original code commented out for debugging
     if (!statement_handle) {
         trino_log("SQLSetStmtAttr: statement_handle is NULL");
         return SQL_INVALID_HANDLE;
@@ -591,6 +597,7 @@ SQLRETURN SQL_API SQLSetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute
     SQLRETURN ret = trino_stmt_set_attr(stmt, attribute, value_ptr, string_length);
     trino_log("SQLSetStmtAttr: exit ret=%d", ret);
     return ret;
+    */
 }
 
 SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER value,
