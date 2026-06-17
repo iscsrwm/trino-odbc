@@ -7,6 +7,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* ODBC function bitmap macros (from sqlext.h, defined here for portability) */
+#ifndef SQL_API_ODBC3_ALL_FUNCTIONS_SIZE
+#define SQL_API_ODBC3_ALL_FUNCTIONS_SIZE 250
+#endif
+
+#ifndef SQL_FUNC_EXISTS
+#define SQL_FUNC_EXISTS(pfExists, uwAPI) \
+    ((*(((UWORD*)(pfExists)) + ((uwAPI) >> 4)) & (1 << ((uwAPI) & 0x000F))) ? SQL_TRUE : SQL_FALSE)
+#endif
+
+/* Macro to SET a function as supported in the bitmap */
+#define SQL_FUNC_SET(pfExists, uwAPI) \
+    (*(((UWORD*)(pfExists)) + ((uwAPI) >> 4)) |= (1 << ((uwAPI) & 0x000F)))
+
 /* ========================================================================
  * SQLGetInfo - Returns information about the data source and driver
  * ======================================================================== */
@@ -502,8 +516,8 @@ SQLRETURN SQLGetFunctions(SQLHDBC connection_handle, SQLUSMALLINT function_id,
         SQLUSMALLINT *array = supported;
         memset(array, 0, sizeof(SQLUSMALLINT) * SQL_API_ODBC3_ALL_FUNCTIONS_SIZE);
         
-        /* Set bits for supported functions using SQL_FUNC_EXISTS macro */
-        #define MARK_SUPPORTED(fid) SQL_FUNC_EXISTS(array, fid)
+        /* Set bits for supported functions using SQL_FUNC_SET macro */
+        #define MARK_SUPPORTED(fid) SQL_FUNC_SET(array, fid)
         
         MARK_SUPPORTED(SQL_API_SQLALLOCHANDLE);
         MARK_SUPPORTED(SQL_API_SQLFREEHANDLE);
@@ -541,6 +555,10 @@ SQLRETURN SQLGetFunctions(SQLHDBC connection_handle, SQLUSMALLINT function_id,
         MARK_SUPPORTED(SQL_API_SQLSPECIALCOLUMNS);
         
         #undef MARK_SUPPORTED
+        
+        /* Log that we set the bitmap and verify SQLAllocHandle is marked */
+        trino_log("SQLGetFunctions: set ODBC3_ALL_FUNCTIONS bitmap, SQLAllocHandle=%d",
+                  SQL_FUNC_EXISTS(array, SQL_API_SQLALLOCHANDLE));
         return SQL_SUCCESS;
     }
 
