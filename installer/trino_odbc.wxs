@@ -48,16 +48,18 @@
   <Fragment>
     <ComponentGroup Id="DriverComponents" Directory="BINFOLDER">
       <!-- The driver DLL plus the ODBC driver registration.
-           ShortNames="no" stops WiX from generating an 8.3 short name for the
-           DLL. The ODBC <ODBCDriver> registration formats the Driver/Setup
-           registry values from the file's name; if a short name exists WiX
-           writes "<shortname>|trino_odbc.dll", and ODBC then tries to load the
-           non-existent short name -> "system error code 126" during driver
-           registration. Suppressing the short name writes the real path. -->
+           "trino_odbc.dll" is longer than 8.3, so WiX would otherwise generate
+           an arbitrary short name (e.g. "bfpej77o.dll"). The <ODBCDriver>
+           registration writes the Driver/Setup registry values as
+           "<shortname>|<longname>", and ODBC tries to load the short name
+           first - if it does not exist on disk, driver registration fails with
+           "system error code 126". Pinning an explicit, valid 8.3 ShortName
+           ensures the short name written to the registry is one the installer
+           actually creates on disk. -->
       <Component Id="DriverDll" Bitness="always64" Guid="*">
         <File Id="trino_odbc.dll"
               Name="trino_odbc.dll"
-              ShortNames="no"
+              ShortName="trinoodb.dll"
               Source="$(var.BinDir)\trino_odbc.dll"
               KeyPath="yes">
           <!-- Registers the driver with the ODBC subsystem. Nested in <File>,
