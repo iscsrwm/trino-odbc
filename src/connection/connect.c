@@ -92,10 +92,7 @@ SQLRETURN SQLConnect(SQLHDBC connection_handle, SQLCHAR *server_name,
     free(password);
 
     SQLRETURN ret = trino_conn_connect(conn, &config);
-    if (ret != SQL_SUCCESS) {
-        trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_LOGIN_FAILED, 0,
-                             "Failed to connect to Trino server");
-    }
+    /* trino_conn_connect sets a specific diagnostic on failure; keep it. */
     return ret;
 }
 
@@ -142,8 +139,8 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
     ret = trino_conn_connect(conn, &config);
     if (ret != SQL_SUCCESS) {
         free(conn_str);
-        trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_LOGIN_FAILED, 0,
-                             "Failed to connect to Trino server");
+        /* trino_conn_connect already set a specific diagnostic (e.g. the curl
+         * error or HTTP status); do not overwrite it. */
         return SQL_ERROR;
     }
 

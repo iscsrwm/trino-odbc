@@ -146,6 +146,11 @@ void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx);
  * out_size-1). Exposed for testing; used internally when building requests. */
 void trino_http_sanitize_header_value(const char *value, char *out, size_t out_size);
 
+/* Validate connectivity (GET /v1/info). On failure writes a reason into
+ * err_buf. Returns SQL_SUCCESS on HTTP 200. */
+SQLRETURN trino_http_client_validate(trino_http_client_t *client, char *err_buf,
+                                     size_t err_buf_size);
+
 /* Configure client from connection */
 SQLRETURN trino_http_client_configure(trino_http_client_t *client, const char *server,
                                       SQLINTEGER port, const char *user,

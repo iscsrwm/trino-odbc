@@ -269,6 +269,70 @@ static char *perform_request(trino_http_client_t *client, const char *method,
     return chunk.mem; /* caller frees */
 }
 
+/* Validate connectivity to the Trino server by issuing GET /v1/info. On
+ * failure, writes a human-readable reason (curl error and/or HTTP status) into
+ * err_buf. Returns SQL_SUCCESS if the server responds with HTTP 200. */
+SQLRETURN trino_http_client_validate(trino_http_client_t *client, char *err_buf,
+                                     size_t err_buf_size)
+{
+    if (!client || !client->easy_handle) {
+        if (err_buf && err_buf_size)
+            snprintf(err_buf, err_buf_size, "HTTP client not initialized");
+        return SQL_ERROR;
+    }
+    if (g_test_transport) {
+        return SQL_SUCCESS; /* tests bypass real validation */
+    }
+
+    char url[1024];
+    snprintf(url, sizeof(url), "%s/v1/info", client->server_url);
+
+    /* Apply auth so endpoints that require it still answer /v1/info. */
+    trino_auth_method_t auth = trino_auth_parse(client->auth_type);
+    trino_auth_apply(client->easy_handle, auth, client->user, client->password,
+                     client->ssl_truststore);
+
+    curl_easy_setopt(client->easy_handle, CURLOPT_URL, url);
+    curl_easy_setopt(client->easy_handle, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(client->easy_handle, CURLOPT_POST, 0L);
+    curl_easy_setopt(client->easy_handle, CURLOPT_HTTPHEADER, NULL);
+
+    char curl_err[CURL_ERROR_SIZE] = {0};
+    curl_easy_setopt(client->easy_handle, CURLOPT_ERRORBUFFER, curl_err);
+
+    memchunk_t chunk = {0};
+    chunk.mem = calloc(1, 1);
+    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEFUNCTION, memchunk_callback);
+    curl_easy_setopt(client->easy_handle, CURLOPT_WRITEDATA, &chunk);
+
+    CURLcode res = curl_easy_perform(client->easy_handle);
+    long http_code = 0;
+    curl_easy_getinfo(client->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
+    free(chunk.mem);
+    curl_easy_setopt(client->easy_handle, CURLOPT_ERRORBUFFER, NULL);
+
+    if (res != CURLE_OK) {
+        if (err_buf && err_buf_size) {
+            snprintf(err_buf, err_buf_size, "Cannot reach %s: %s", url,
+                     curl_err[0] ? curl_err : curl_easy_strerror(res));
+        }
+        return SQL_ERROR;
+    }
+    if (http_code == 401 || http_code == 403) {
+        if (err_buf && err_buf_size)
+            snprintf(err_buf, err_buf_size, "Authentication failed (HTTP %ld) for %s",
+                     http_code, url);
+        return SQL_ERROR;
+    }
+    if (http_code != 200) {
+        if (err_buf && err_buf_size)
+            snprintf(err_buf, err_buf_size, "Server returned HTTP %ld for %s", http_code,
+                     url);
+        return SQL_ERROR;
+    }
+    return SQL_SUCCESS;
+}
+
 /* ========================================================================
  * Execute SQL query
  * ======================================================================== */

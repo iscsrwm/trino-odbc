@@ -345,6 +345,11 @@ TEST(e2e_driver_connect_disconnect)
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
 
+    /* Install a mock transport so connect-time validation succeeds offline. */
+    const char *responses[] = {NULL};
+    mock_script_t script = {responses, 0, "", ""};
+    trino_http_set_test_transport(mock_transport, &script);
+
     SQLCHAR out[256];
     SQLSMALLINT out_len = 0;
     ASSERT_EQ(SQLDriverConnect(
@@ -368,6 +373,7 @@ TEST(e2e_driver_connect_disconnect)
 
     SQLFreeHandle(SQL_HANDLE_DBC, dbc);
     SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
 }
 
 /* SQLConnect connects with a host + user + password (PASSWORD auth). */
@@ -377,6 +383,11 @@ TEST(e2e_sqlconnect)
     SQLHDBC dbc;
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env), SQL_SUCCESS);
     ASSERT_EQ(SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc), SQL_SUCCESS);
+
+    /* Install a mock transport so connect-time validation succeeds offline. */
+    const char *responses[] = {NULL};
+    mock_script_t script = {responses, 0, "", ""};
+    trino_http_set_test_transport(mock_transport, &script);
 
     ASSERT_EQ(SQLConnect(dbc, (SQLCHAR *)"trino.example.com:9090", SQL_NTS,
                          (SQLCHAR *)"alice", SQL_NTS, (SQLCHAR *)"secret", SQL_NTS),
@@ -392,6 +403,7 @@ TEST(e2e_sqlconnect)
     ASSERT_EQ(SQLDisconnect(dbc), SQL_SUCCESS);
     SQLFreeHandle(SQL_HANDLE_DBC, dbc);
     SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
 }
 
 /* SQLGetData converts date/time/timestamp/bit values into ODBC C structs. */

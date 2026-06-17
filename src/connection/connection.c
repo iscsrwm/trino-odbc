@@ -251,6 +251,34 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
     conn->connected = true;
 
     pthread_mutex_unlock(&conn->mutex);
+
+    /* Validate connectivity against the server so the caller gets a real error
+     * instead of a connection that only fails later. get_http_client locks the
+     * connection mutex, so this must run after the unlock above. */
+    trino_http_client_t *client = trino_conn_get_http_client(conn);
+    if (!client) {
+        pthread_mutex_lock(&conn->mutex);
+        conn->connected = false;
+        pthread_mutex_unlock(&conn->mutex);
+        trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_LOGIN_FAILED, 0,
+                             "Failed to initialize HTTP client");
+        return SQL_ERROR;
+    }
+
+    char err[512] = {0};
+    if (trino_http_client_validate(client, err, sizeof(err)) != SQL_SUCCESS) {
+        pthread_mutex_lock(&conn->mutex);
+        conn->connected = false;
+        if (conn->http_client) {
+            trino_http_client_destroy(conn->http_client);
+            conn->http_client = NULL;
+        }
+        pthread_mutex_unlock(&conn->mutex);
+        trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_LOGIN_FAILED, 0,
+                             err[0] ? err : "Failed to connect to Trino server");
+        return SQL_ERROR;
+    }
+
     return SQL_SUCCESS;
 }
 
