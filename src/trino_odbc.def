@@ -1,0 +1,96 @@
+LIBRARY trino_odbc
+EXPORTS
+    ; Core ODBC functions
+    SQLAllocHandle
+    SQLFreeHandle
+    SQLAllocEnv
+    SQLAllocConnect
+    SQLAllocStmt
+    SQLFreeEnv
+    SQLFreeConnect
+    SQLFreeStmt
+    
+    ; Connection functions
+    SQLConnect
+    SQLDriverConnect
+    SQLDisconnect
+    SQLConnectW
+    SQLDriverConnectW
+    
+    ; Attribute functions
+    SQLSetEnvAttr
+    SQLGetEnvAttr
+    SQLSetEnvAttrW
+    SQLGetEnvAttrW
+    SQLSetConnectAttr
+    SQLGetConnectAttr
+    SQLSetConnectAttrW
+    SQLGetConnectAttrW
+    SQLSetStmtAttr
+    SQLGetStmtAttr
+    SQLSetStmtAttrW
+    SQLGetStmtAttrW
+    
+    ; Statement execution
+    SQLPrepare
+    SQLExecute
+    SQLExecDirect
+    SQLPrepareW
+    SQLExecDirectW
+    SQLCancel
+    SQLMoreResults
+    
+    ; Result set functions
+    SQLFetch
+    SQLFetchScroll
+    SQLGetData
+    SQLBindCol
+    SQLNumResultCols
+    SQLRowCount
+    SQLColAttribute
+    SQLColAttributeW
+    
+    ; Parameter functions
+    SQLBindParameter
+    SQLNumParams
+    SQLParamData
+    SQLPutData
+    
+    ; Information functions
+    SQLGetInfo
+    SQLGetInfoW
+    SQLGetFunctions
+    
+    ; Diagnostic functions
+    SQLGetDiagRec
+    SQLGetDiagField
+    SQLGetDiagRecW
+    SQLGetDiagFieldW
+    
+    ; Catalog functions
+    SQLTables
+    SQLColumns
+    SQLPrimaryKeys
+    SQLForeignKeys
+    SQLStatistics
+    SQLSpecialColumns
+    SQLTablePrivileges
+    SQLColumnPrivileges
+    SQLTablesW
+    SQLColumnsW
+    SQLPrimaryKeysW
+    SQLStatisticsW
+    SQLSpecialColumnsW
+    
+    ; Transaction functions
+    SQLCommit
+    SQLRollback
+    SQLSetConnectAttr_txn_isolation
+    SQLGetConnectAttr_txn_isolation
+    
+    ; Cursor functions
+    SQLSetPos
+    
+    ; Data source functions
+    SQLDataSources
+    SQLDrivers
