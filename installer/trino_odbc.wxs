@@ -20,15 +20,27 @@
   (vcpkg x64-windows-static-md triplet), so no dependency DLLs are shipped.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <?ifndef Version?>
+  <?define Version=1.0.0.0?>
+  <?endif?>
+
   <Package Name="Trino ODBC Driver"
            Manufacturer="Trino ODBC"
-           Version="1.0.0.0"
+           Version="$(var.Version)"
            UpgradeCode="7C3D9E54-1E2B-4F8A-9C5D-2A6B7E0F1234"
            Scope="perMachine"
            Compressed="yes">
 
-    <!-- Block downgrades; allow in-place major upgrades. -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of the Trino ODBC Driver is already installed." />
+    <!-- Remove any previously installed version first, then install fresh.
+         AfterInstallValidate ensures the old files are removed even when the
+         version is unchanged, so a rebuild always replaces the driver DLL. -->
+    <MajorUpgrade
+        Schedule="afterInstallValidate"
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of the Trino ODBC Driver is already installed." />
+
+    <!-- Force file overwrite even when versions/timestamps match. -->
+    <Property Id="REINSTALLMODE" Value="amus" />
 
     <!-- Single embedded cab. -->
     <MediaTemplate EmbedCab="yes" />

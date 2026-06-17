@@ -56,10 +56,20 @@ Write-Host "==> Found driver DLL at $binDir"
 # preset uses the x64-windows-static-md vcpkg triplet), so there are no runtime
 # dependency DLLs to bundle - the MSI ships a single self-contained driver DLL.
 
+# Derive a monotonically increasing build version so each rebuilt MSI is seen
+# as an upgrade by Windows Installer and always replaces the installed DLL.
+# Format: 1.0.<days-since-2020>.<seconds-since-midnight/2> (fits 0-65535).
+$now = Get-Date
+$build  = [int]((New-TimeSpan -Start (Get-Date '2020-01-01') -End $now).TotalDays)
+$revRaw = [int]($now.TimeOfDay.TotalSeconds / 2)
+$msiVersion = "1.0.$build.$revRaw"
+Write-Host "==> MSI version: $msiVersion"
+
 Write-Host "==> Building MSI with WiX"
 wix build installer/trino_odbc.wxs `
     -arch x64 `
     -d "BinDir=$binDir" `
+    -d "Version=$msiVersion" `
     -o $Output
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
