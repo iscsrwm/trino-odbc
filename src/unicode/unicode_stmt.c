@@ -87,12 +87,7 @@ SQLRETURN SQL_API SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len
 SQLRETURN SQL_API SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
                                    SQLINTEGER str_len)
 {
-    /* In Unicode mode, .NET calls this directly with wrapper handles.
-     * For now, just log and return success to avoid crashes. Most statement
-     * attributes can be safely ignored for basic query execution. */
-    (void)stmt; (void)str_len;
-    trino_log("SQLSetStmtAttrW: attr=%d value=%p (no-op, returning SUCCESS)", 
-              (int)attr, value);
+    (void)stmt; (void)attr; (void)value; (void)str_len;
     return SQL_SUCCESS;
 }
 
