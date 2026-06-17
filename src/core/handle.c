@@ -132,12 +132,14 @@ SQLRETURN SQLAllocHandle(SQLSMALLINT handle_type, SQLHANDLE input_handle,
         }
 
         case SQL_HANDLE_STMT: {
+            trino_log("SQLAllocHandle: STMT case entered, input_handle=%p", (void *)input_handle);
             if (!input_handle) {
                 trino_log("SQLAllocHandle: STMT input_handle is NULL");
                 pthread_mutex_unlock(&g_pool_mutex);
                 return SQL_INVALID_HANDLE;
             }
             trino_conn_t *conn = (trino_conn_t *)input_handle;
+            trino_log("SQLAllocHandle: STMT conn cast complete, checking validity");
             if (!trino_conn_valid(conn)) {
                 trino_log("SQLAllocHandle: STMT conn validation failed conn=%p", (void *)conn);
                 pthread_mutex_unlock(&g_pool_mutex);
