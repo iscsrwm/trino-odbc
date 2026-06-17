@@ -47,38 +47,53 @@
 
   <Fragment>
     <ComponentGroup Id="DriverComponents" Directory="BINFOLDER">
-      <!-- The driver DLL plus the ODBC driver registration.
-           "trino_odbc.dll" is longer than 8.3, so WiX would otherwise generate
-           an arbitrary short name (e.g. "bfpej77o.dll"). The <ODBCDriver>
-           registration writes the Driver/Setup registry values as
-           "<shortname>|<longname>", and ODBC tries to load the short name
-           first - if it does not exist on disk, driver registration fails with
-           "system error code 126". Pinning an explicit, valid 8.3 ShortName
-           ensures the short name written to the registry is one the installer
-           actually creates on disk. -->
+      <!--
+        Driver DLL + ODBC registration.
+
+        We register the driver with explicit <RegistryValue> entries rather than
+        the <ODBCDriver> element. <ODBCDriver> writes the Driver/Setup registry
+        values in WiX's "[!shortname]|[longname]" file-path format; the ODBC
+        driver manager does not handle that pipe-delimited form for these values
+        and fails to load the driver ("system error code 126"). Writing the
+        plain full path to trino_odbc.dll avoids the problem entirely. The keys
+        mirror windows/install.reg and live in the 64-bit registry view.
+
+        curl and json-c are statically linked into trino_odbc.dll, so there are
+        no dependency DLLs to ship.
+      -->
       <Component Id="DriverDll" Bitness="always64" Guid="*">
         <File Id="trino_odbc.dll"
               Name="trino_odbc.dll"
-              ShortName="trinoodb.dll"
               Source="$(var.BinDir)\trino_odbc.dll"
-              KeyPath="yes">
-          <!-- Registers the driver with the ODBC subsystem. Nested in <File>,
-               WiX points both the Driver and Setup registry values at this DLL
-               (this driver has no separate Setup DLL). The attributes mirror
-               windows/install.reg. -->
-          <ODBCDriver Id="TrinoODBCDriver" Name="Trino ODBC Driver">
-            <Property Id="APILevel" Value="1" />
-            <Property Id="ConnectFunctions" Value="YYN" />
-            <Property Id="DriverODBCVer" Value="03.80" />
-            <Property Id="SQLLevel" Value="1" />
-          </ODBCDriver>
-        </File>
+              KeyPath="yes" />
+
+        <!-- Add the driver to the installed-drivers list. -->
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers"
+                       Name="Trino ODBC Driver" Type="string" Value="Installed" />
+
+        <!-- The driver's own registration key. -->
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver"
+                       Name="Driver" Type="string"
+                       Value="[#trino_odbc.dll]" />
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver"
+                       Name="Setup" Type="string"
+                       Value="[#trino_odbc.dll]" />
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver"
+                       Name="APILevel" Type="string" Value="1" />
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver"
+                       Name="ConnectFunctions" Type="string" Value="YYN" />
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver"
+                       Name="DriverODBCVer" Type="string" Value="03.80" />
+        <RegistryValue Root="HKLM"
+                       Key="SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver"
+                       Name="SQLLevel" Type="string" Value="1" />
       </Component>
-      <!--
-        curl and json-c are statically linked into trino_odbc.dll, so there are
-        no dependency DLLs to ship. If you switch to dynamic dependencies, add
-        File components here for the runtime DLLs (or use `wix harvest`).
-      -->
     </ComponentGroup>
   </Fragment>
 </Wix>
