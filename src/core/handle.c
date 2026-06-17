@@ -291,3 +291,47 @@ bool trino_stmt_valid(trino_stmt_t *stmt)
         return false;
     return stmt->type == TRINO_HANDLE_STMT;
 }
+
+/* ========================================================================
+ * ODBC 2.x compatibility functions
+ * ======================================================================== */
+
+SQLRETURN SQLAllocEnv(SQLHENV *env)
+{
+    trino_log("SQLAllocEnv: ODBC 2.x entry point called");
+    return SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, env);
+}
+
+SQLRETURN SQLAllocConnect(SQLHENV env, SQLHDBC *dbc)
+{
+    trino_log("SQLAllocConnect: ODBC 2.x entry point called");
+    return SQLAllocHandle(SQL_HANDLE_DBC, env, dbc);
+}
+
+SQLRETURN SQLAllocStmt(SQLHDBC dbc, SQLHSTMT *stmt)
+{
+    trino_log("SQLAllocStmt: ODBC 2.x entry point called, dbc=%p", (void *)dbc);
+    return SQLAllocHandle(SQL_HANDLE_STMT, dbc, stmt);
+}
+
+SQLRETURN SQLFreeEnv(SQLHENV env)
+{
+    trino_log("SQLFreeEnv: ODBC 2.x entry point called");
+    return SQLFreeHandle(SQL_HANDLE_ENV, env);
+}
+
+SQLRETURN SQLFreeConnect(SQLHDBC dbc)
+{
+    trino_log("SQLFreeConnect: ODBC 2.x entry point called");
+    return SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+}
+
+SQLRETURN SQLFreeStmt(SQLHSTMT stmt, SQLUSMALLINT option)
+{
+    trino_log("SQLFreeStmt: ODBC 2.x entry point called, option=%d", (int)option);
+    if (option == SQL_DROP) {
+        return SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    }
+    /* SQL_CLOSE, SQL_UNBIND, SQL_RESET_PARAMS - not fully implemented yet */
+    return SQL_SUCCESS;
+}
