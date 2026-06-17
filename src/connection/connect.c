@@ -60,6 +60,8 @@ SQLRETURN SQLConnect(SQLHDBC connection_handle, SQLCHAR *server_name,
                      SQLSMALLINT name_length2, SQLCHAR *authentication,
                      SQLSMALLINT name_length3)
 {
+    trino_log("SQLConnect: ENTRY handle=%p", (void *)connection_handle);
+
     if (!connection_handle)
         return SQL_INVALID_HANDLE;
 
@@ -127,12 +129,16 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
     (void)window_handle;
     (void)driver_completion; /* No interactive prompting (no GUI). */
 
+    trino_log("SQLDriverConnect: ENTRY handle=%p", (void *)connection_handle);
+
     if (!connection_handle)
         return SQL_INVALID_HANDLE;
 
     trino_conn_t *conn = (trino_conn_t *)connection_handle;
-    if (!trino_conn_valid(conn))
+    if (!trino_conn_valid(conn)) {
+        trino_log("SQLDriverConnect: invalid handle (type mismatch)");
         return SQL_INVALID_HANDLE;
+    }
 
     if (conn->connected) {
         trino_diag_set_error(&conn->diagnostics, "08002", 0, "Connection name in use");

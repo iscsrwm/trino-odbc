@@ -1,6 +1,7 @@
 #include "trino_odbc/core.h"
 #include "trino_odbc/connection.h"
 #include "trino_odbc/statement.h"
+#include "trino_odbc/log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -56,6 +57,9 @@ static void handle_pool_free(handle_slot_t *slot)
 SQLRETURN SQLAllocHandle(SQLSMALLINT handle_type, SQLHANDLE input_handle,
                          SQLHANDLE *output_handle)
 {
+    trino_log("SQLAllocHandle: type=%d input=%p", (int)handle_type,
+              (void *)input_handle);
+
     if (!output_handle) {
         return SQL_INVALID_HANDLE;
     }
