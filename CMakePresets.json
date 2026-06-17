@@ -20,12 +20,32 @@
         "TRINO_ODBC_STATIC_DEPS": "ON",
         "TRINO_ODBC_STATIC_CRT": "ON"
       }
+    },
+    {
+      "name": "windows-x64-dyncrt",
+      "displayName": "Windows x64 DIAGNOSTIC (dynamic CRT)",
+      "description": "DIAGNOSTIC build: links the dynamic MSVC runtime (/MD) and dynamic vcpkg deps. Used to test the hypothesis that the static CRT is causing the DM-dispatch access violation. Requires the VC++ redistributable on the target machine.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-windows-dyncrt",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTS": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "TRINO_ODBC_STATIC_DEPS": "ON",
+        "TRINO_ODBC_STATIC_CRT": "OFF"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "windows-x64",
       "configurePreset": "windows-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-x64-dyncrt",
+      "configurePreset": "windows-x64-dyncrt",
       "configuration": "Release"
     }
   ]
