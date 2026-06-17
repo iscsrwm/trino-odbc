@@ -573,12 +573,15 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 SQLRETURN SQLSetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute,
                          SQLPOINTER value_ptr, SQLINTEGER string_length)
 {
+    trino_log("SQLSetStmtAttr: entry attr=%d stmt=%p", (int)attribute, (void *)statement_handle);
     if (!statement_handle)
         return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt))
+    if (!trino_stmt_valid(stmt)) {
+        trino_log("SQLSetStmtAttr: invalid statement handle");
         return SQL_INVALID_HANDLE;
+    }
 
     return trino_stmt_set_attr(stmt, attribute, value_ptr, string_length);
 }
