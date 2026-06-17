@@ -151,7 +151,24 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
                              "Missing connection string");
         return SQL_ERROR;
     }
-    trino_log("SQLDriverConnect: in_conn_str=%s", conn_str);
+    /* Redact the password before logging the connection string. */
+    {
+        char *redacted = strdup(conn_str);
+        if (redacted) {
+            char *p = redacted;
+            while (*p) {
+                if (strncasecmp(p, "Password=", 9) == 0) {
+                    p += 9;
+                    while (*p && *p != ';')
+                        *p++ = '*';
+                } else {
+                    p++;
+                }
+            }
+            trino_log("SQLDriverConnect: in_conn_str=%s", redacted);
+            free(redacted);
+        }
+    }
 
     trino_conn_config_t config;
     SQLRETURN ret = trino_parse_conn_string((const SQLCHAR *)conn_str, &config);

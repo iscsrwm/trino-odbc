@@ -51,6 +51,10 @@ set(TRANSACTION_SOURCES
     ${CMAKE_SOURCE_DIR}/src/transaction/transaction.c
 )
 
+set(UNICODE_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/unicode/unicode_stmt.c
+)
+
 # Add the shared library
 add_library(trino_odbc SHARED
     ${CORE_SOURCES}
@@ -62,6 +66,7 @@ add_library(trino_odbc SHARED
     ${ERROR_SOURCES}
     ${CATALOG_SOURCES}
     ${TRANSACTION_SOURCES}
+    ${UNICODE_SOURCES}
 )
 
 # Link dependencies

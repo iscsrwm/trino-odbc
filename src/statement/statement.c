@@ -256,6 +256,7 @@ SQLRETURN SQLExecute(SQLHSTMT statement_handle)
 SQLRETURN SQLExecDirect(SQLHSTMT statement_handle, SQLCHAR *statement_text,
                         SQLINTEGER text_length)
 {
+    trino_log("SQLExecDirect: ENTRY handle=%p", (void *)statement_handle);
     if (!statement_handle)
         return SQL_INVALID_HANDLE;
 
