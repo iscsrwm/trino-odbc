@@ -61,5 +61,15 @@ wix build installer/trino_odbc.wxs `
     -arch x64 `
     -d "BinDir=$binDir" `
     -o $Output
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "WiX failed. If you saw error WIX7015 (OSMF EULA), WiX v7 requires"
+    Write-Host "accepting the Open Source Maintenance Fee EULA. Either:"
+    Write-Host "  * accept it:  `$env:WIX_ACCEPT_OSMF_EULA = '1'   (see https://wixtoolset.org/osmf/)"
+    Write-Host "  * or use WiX v5 (no OSMF gate, same .wxs syntax):"
+    Write-Host "      dotnet tool uninstall --global wix"
+    Write-Host "      dotnet tool install   --global wix --version 5.0.2"
+    throw "wix build failed (exit code $LASTEXITCODE)."
+}
 
 Write-Host "==> Done: $Output"

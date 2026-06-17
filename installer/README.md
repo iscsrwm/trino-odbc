@@ -19,7 +19,7 @@ the standard VC++ runtime that ships with Windows.
 | Visual Studio Build Tools (2022 or newer) | MSVC C toolchain + Ninja (included with the "Desktop development with C++" workload). The free "Build Tools" SKU is sufficient. |
 | CMake | 3.21+ (for presets). The one bundled with Visual Studio works. |
 | [vcpkg](https://vcpkg.io) | Provides `curl` and `json-c`. Set `VCPKG_ROOT`. |
-| [WiX Toolset](https://wixtoolset.org) v4/v5 | `dotnet tool install --global wix` |
+| [WiX Toolset](https://wixtoolset.org) v4/v5 | `dotnet tool install --global wix --version 5.0.2`. Avoid v7 unless you've accepted its OSMF EULA (see troubleshooting). |
 
 > The driver itself is plain C and links the system `odbc32.lib` / `odbccp32.lib`
 > (handled automatically by `src/CMakeLists.txt` on Windows). The only external
@@ -117,6 +117,7 @@ signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `
 | `cl.exe` / compiler not found at configure time | You're not in a Developer shell. Launch "x64 Native Tools Command Prompt for VS" (or "Developer PowerShell"), then `powershell` if you want PowerShell. |
 | vcpkg can't download (proxy/firewall) | Set `HTTP_PROXY` / `HTTPS_PROXY`, or pre-install: `vcpkg install curl json-c --triplet x64-windows-static-md`. |
 | `trino_odbc.dll not found under build-windows\src` | The compile step failed earlier - scroll up for the MSVC/CMake error. |
+| `WIX7015: You must accept the Open Source Maintenance Fee (OSMF) EULA` | WiX **v7** gates builds behind the OSMF EULA. Either set `$env:WIX_ACCEPT_OSMF_EULA = "1"` (after reviewing https://wixtoolset.org/osmf/), or use WiX **v5** which has no such gate: `dotnet tool install --global wix --version 5.0.2`. The `.wxs` works unchanged on v4/v5/v7. |
 
 ## CI
 
