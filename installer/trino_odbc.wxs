@@ -47,13 +47,20 @@
 
   <Fragment>
     <ComponentGroup Id="DriverComponents" Directory="BINFOLDER">
-      <!-- The driver DLL plus the ODBC driver registration. -->
+      <!-- The driver DLL plus the ODBC driver registration.
+           Name="trino_odbc.dll" pins the installed file name so WiX does not
+           emit a mangled 8.3 short name; without it the ODBC Setup/Driver
+           registry values can reference a non-existent short name and driver
+           registration fails with "system error code 126". -->
       <Component Id="DriverDll" Bitness="always64" Guid="*">
         <File Id="trino_odbc.dll"
+              Name="trino_odbc.dll"
               Source="$(var.BinDir)\trino_odbc.dll"
               KeyPath="yes">
-          <!-- Registers the driver with the ODBC subsystem. The attributes
-               mirror windows/install.reg. -->
+          <!-- Registers the driver with the ODBC subsystem. Nested in <File>,
+               WiX points both the Driver and Setup registry values at this DLL
+               (this driver has no separate Setup DLL). The attributes mirror
+               windows/install.reg. -->
           <ODBCDriver Id="TrinoODBCDriver" Name="Trino ODBC Driver">
             <Property Id="APILevel" Value="1" />
             <Property Id="ConnectFunctions" Value="YYN" />
