@@ -90,6 +90,7 @@ int main(int argc, char *argv[]) {
     
     // 6. Set query timeout (tests SQLSetStmtAttrW)
     printf("6. Setting query timeout...\n");
+    fflush(stdout);
     printf("   About to call SQLSetStmtAttr...\n");
     fflush(stdout);
     rc = SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)30, 0);
@@ -122,16 +123,26 @@ int main(int argc, char *argv[]) {
     printf("=== TEST PASSED ===\n");
     
 cleanup:
+    printf("\n=== CLEANUP ===\n");
+    fflush(stdout);
     if (stmt != SQL_NULL_HSTMT) {
+        printf("Freeing statement handle...\n");
+        fflush(stdout);
         SQLFreeHandle(SQL_HANDLE_STMT, stmt);
     }
     if (dbc != SQL_NULL_HDBC) {
+        printf("Disconnecting...\n");
+        fflush(stdout);
         SQLDisconnect(dbc);
         SQLFreeHandle(SQL_HANDLE_DBC, dbc);
     }
     if (env != SQL_NULL_HENV) {
+        printf("Freeing environment handle...\n");
+        fflush(stdout);
         SQLFreeHandle(SQL_HANDLE_ENV, env);
     }
     
+    printf("Exiting with code 0\n");
+    fflush(stdout);
     return 0;
 }
