@@ -9,7 +9,11 @@
  */
 
 #include "trino_odbc/protocol.h"
+#ifdef _WIN32
+#include "trino_odbc/compat.h"
+#else
 #include <pthread.h>
+#endif
 #include <stdlib.h>
 
 /* One mutex per shareable data type curl may lock concurrently. */

@@ -3,7 +3,11 @@
 
 #include "trino_odbc.h"
 #include "trino_odbc/error.h"
+#ifdef _WIN32
+#include "trino_odbc/compat.h" /* provides a pthread_mutex_t shim on Windows */
+#else
 #include <pthread.h>
+#endif
 
 /* ========================================================================
  * Handle types

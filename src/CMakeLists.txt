@@ -84,8 +84,10 @@ set_target_properties(trino_odbc PROPERTIES
 # Compiler warnings. MSVC uses a different flag set than GCC/Clang.
 if(MSVC)
     target_compile_options(trino_odbc PRIVATE /W3)
-    # ODBC headers and our code use standard C string functions.
-    target_compile_definitions(trino_odbc PRIVATE _CRT_SECURE_NO_WARNINGS)
+    # Our code uses standard C string functions and POSIX names (strdup); silence
+    # MSVC's deprecation warnings for both.
+    target_compile_definitions(trino_odbc PRIVATE
+        _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
 else()
     target_compile_options(trino_odbc PRIVATE -Wall -Wextra -Wpedantic)
 endif()

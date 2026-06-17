@@ -43,6 +43,43 @@ static inline char *trino_strndup(const char *s, size_t n)
 #define strndup trino_strndup
 #endif
 
+/* ------------------------------------------------------------------------
+ * Threading: the driver uses a small subset of the pthreads mutex API. On
+ * Windows there is no <pthread.h>; map that subset onto an SRWLOCK, which
+ * (unlike CRITICAL_SECTION) supports a static initializer for file-scope
+ * mutexes declared with PTHREAD_MUTEX_INITIALIZER.
+ * ------------------------------------------------------------------------ */
+#include <windows.h>
+
+typedef SRWLOCK pthread_mutex_t;
+
+#define PTHREAD_MUTEX_INITIALIZER SRWLOCK_INIT
+
+static inline int pthread_mutex_init(pthread_mutex_t *m, const void *attr)
+{
+    (void)attr;
+    InitializeSRWLock(m);
+    return 0;
+}
+
+static inline int pthread_mutex_destroy(pthread_mutex_t *m)
+{
+    (void)m; /* SRWLOCKs require no teardown. */
+    return 0;
+}
+
+static inline int pthread_mutex_lock(pthread_mutex_t *m)
+{
+    AcquireSRWLockExclusive(m);
+    return 0;
+}
+
+static inline int pthread_mutex_unlock(pthread_mutex_t *m)
+{
+    ReleaseSRWLockExclusive(m);
+    return 0;
+}
+
 #endif /* _WIN32 */
 
 #endif /* TRINO_ODBC_COMPAT_H */
