@@ -198,3 +198,61 @@ SQLRETURN SQLGetDiagField(SQLSMALLINT handle_type, SQLHANDLE handle,
         default: return SQL_SUCCESS;
     }
 }
+
+/* ========================================================================
+ * SQLGetDiagFieldW — Unicode variant of SQLGetDiagField. The DM calls this for
+ * the string-valued diagnostic fields (SQLSTATE, MESSAGE_TEXT) when the driver
+ * is in Unicode mode. Numeric/header fields are width-agnostic and delegated to
+ * the ANSI implementation. String lengths are reported in BYTES per the ODBC
+ * convention for the W variants.
+ * ======================================================================== */
+
+SQLRETURN SQLGetDiagFieldW(SQLSMALLINT handle_type, SQLHANDLE handle,
+                           SQLSMALLINT rec_number, SQLSMALLINT diag_identifier,
+                           SQLPOINTER diag_info, SQLSMALLINT buffer_length,
+                           SQLSMALLINT *string_length)
+{
+    /* String fields need widening; everything else matches the ANSI form. */
+    if (diag_identifier != SQL_DIAG_SQLSTATE &&
+        diag_identifier != SQL_DIAG_MESSAGE_TEXT) {
+        return SQLGetDiagField(handle_type, handle, rec_number, diag_identifier,
+                               diag_info, buffer_length, string_length);
+    }
+
+    trino_diagnostics_t *diag = diag_for_handle(handle_type, handle);
+    if (!diag)
+        return SQL_INVALID_HANDLE;
+    if (rec_number < 1 || rec_number > diag->record_count)
+        return SQL_NO_DATA;
+
+    trino_diag_record_t *rec = &diag->records[rec_number - 1];
+
+    /* Build the UTF-8 source: 5-char SQLSTATE or the message text. */
+    const char *src = (diag_identifier == SQL_DIAG_SQLSTATE)
+                          ? (const char *)rec->sqlstate
+                          : (const char *)rec->message_text;
+
+    size_t wlen = 0;
+    SQLWCHAR *w = trino_utf8_to_wchars(src, &wlen);
+    SQLRETURN ret = SQL_SUCCESS;
+
+    if (diag_info && buffer_length > 0) {
+        size_t max_wchars = (size_t)buffer_length / sizeof(SQLWCHAR);
+        if (max_wchars == 0)
+            max_wchars = 1;
+        size_t copy = wlen;
+        if (copy > max_wchars - 1)
+            copy = max_wchars - 1;
+        SQLWCHAR *out = (SQLWCHAR *)diag_info;
+        if (w && copy > 0)
+            memcpy(out, w, copy * sizeof(SQLWCHAR));
+        out[copy] = 0;
+        if ((size_t)wlen > copy)
+            ret = SQL_SUCCESS_WITH_INFO;
+    }
+    if (string_length)
+        *string_length = (SQLSMALLINT)(wlen * sizeof(SQLWCHAR));
+
+    free(w);
+    return ret;
+}

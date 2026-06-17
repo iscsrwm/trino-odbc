@@ -1,8 +1,10 @@
 /* SQLGetInfo and SQLGetFunctions implementation */
 
 #include "trino_odbc/connection.h"
+#include "trino_odbc/protocol.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* ========================================================================
  * SQLGetInfo - Returns information about the data source and driver
@@ -379,6 +381,96 @@ SQLRETURN SQLGetInfo(SQLHDBC connection_handle, SQLUSMALLINT info_type,
     }
 
     return SQL_SUCCESS;
+}
+
+/* ========================================================================
+ * SQLGetInfoW - Unicode variant of SQLGetInfo.
+ *
+ * CRITICAL: once the driver exports any W entry point, the Windows ODBC Driver
+ * Manager treats the driver as Unicode and calls SQLGetInfoW (not SQLGetInfo)
+ * during connection setup. If this is missing, SQLDriverConnectW appears to
+ * succeed but the DM's post-connect capability probe fails and Open() aborts
+ * with an empty error message.
+ *
+ * For string-valued info types we widen the ANSI result to UTF-16. For the W
+ * variants, BufferLength and *StringLength are expressed in BYTES (an ODBC
+ * quirk), not characters. Numeric/bitmask info types are width-agnostic and are
+ * delegated straight to the ANSI implementation.
+ * ======================================================================== */
+
+/* Info types that return a character string (everything else is numeric). */
+static int info_type_is_string(SQLUSMALLINT t)
+{
+    switch (t) {
+        case SQL_ACCESSIBLE_TABLES:
+        case SQL_ACCESSIBLE_PROCEDURES:
+        case SQL_CATALOG_NAME:
+        case SQL_CATALOG_TERM:
+        case SQL_DATA_SOURCE_NAME:
+        case SQL_DBMS_NAME:
+        case SQL_DBMS_VER:
+        case SQL_DRIVER_NAME:
+        case SQL_DRIVER_VER:
+        case SQL_DRIVER_ODBC_VER:
+        case SQL_IDENTIFIER_QUOTE_CHAR:
+        case SQL_KEYWORDS:
+        case SQL_LIKE_ESCAPE_CLAUSE:
+        case SQL_NEED_LONG_DATA_LEN:
+        case SQL_ORDER_BY_COLUMNS_IN_SELECT:
+        case SQL_PROCEDURES:
+        case SQL_SCHEMA_TERM:
+        case SQL_SERVER_NAME:
+        case SQL_SPECIAL_CHARACTERS:
+        case SQL_USER_NAME:
+        case SQL_XOPEN_CLI_YEAR: return 1;
+        default: return 0;
+    }
+}
+
+SQLRETURN SQLGetInfoW(SQLHDBC connection_handle, SQLUSMALLINT info_type,
+                      SQLPOINTER info_value, SQLSMALLINT buffer_length,
+                      SQLSMALLINT *str_len)
+{
+    if (!info_type_is_string(info_type)) {
+        /* Numeric info types are identical in both APIs. */
+        return SQLGetInfo(connection_handle, info_type, info_value, buffer_length,
+                          str_len);
+    }
+
+    /* Fetch the ANSI string into a local buffer, then widen to UTF-16. */
+    char ansi[1024] = {0};
+    SQLSMALLINT ansi_len = 0;
+    SQLRETURN ret =
+        SQLGetInfo(connection_handle, info_type, ansi, (SQLSMALLINT)sizeof(ansi),
+                   &ansi_len);
+    if (ret == SQL_ERROR || ret == SQL_INVALID_HANDLE)
+        return ret;
+
+    size_t wlen = 0;
+    SQLWCHAR *w = trino_utf8_to_wchars(ansi, &wlen);
+
+    /* W-variant lengths are in BYTES. */
+    SQLSMALLINT total_bytes = (SQLSMALLINT)(wlen * sizeof(SQLWCHAR));
+
+    if (info_value && buffer_length > 0) {
+        size_t max_wchars = (size_t)buffer_length / sizeof(SQLWCHAR);
+        if (max_wchars == 0)
+            max_wchars = 1;
+        size_t copy = wlen;
+        if (copy > max_wchars - 1)
+            copy = max_wchars - 1;
+        SQLWCHAR *out = (SQLWCHAR *)info_value;
+        if (w && copy > 0)
+            memcpy(out, w, copy * sizeof(SQLWCHAR));
+        out[copy] = 0;
+        if ((size_t)wlen > copy)
+            ret = SQL_SUCCESS_WITH_INFO;
+    }
+    if (str_len)
+        *str_len = total_bytes;
+
+    free(w);
+    return ret;
 }
 
 /* ========================================================================

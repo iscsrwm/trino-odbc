@@ -696,3 +696,21 @@ SQLRETURN SQLGetConnectAttr(SQLHDBC connection_handle, SQLINTEGER attribute,
     return trino_conn_get_attr(conn, attribute, value_ptr, buffer_length,
                                string_length_ptr);
 }
+
+/* Unicode bridges. The connection attributes used during Open() (login/connect
+ * timeout, autocommit, access mode, txn isolation) are all numeric and so are
+ * width-agnostic; delegate straight to the ANSI implementations. The DM, once
+ * the driver is in Unicode mode, calls these W forms. */
+SQLRETURN SQLSetConnectAttrW(SQLHDBC connection_handle, SQLINTEGER attribute,
+                             SQLPOINTER value_ptr, SQLINTEGER string_length)
+{
+    return SQLSetConnectAttr(connection_handle, attribute, value_ptr, string_length);
+}
+
+SQLRETURN SQLGetConnectAttrW(SQLHDBC connection_handle, SQLINTEGER attribute,
+                             SQLPOINTER value_ptr, SQLINTEGER buffer_length,
+                             SQLINTEGER *string_length_ptr)
+{
+    return SQLGetConnectAttr(connection_handle, attribute, value_ptr, buffer_length,
+                             string_length_ptr);
+}
