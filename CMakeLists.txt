@@ -15,6 +15,15 @@ option(BUILD_TESTS "Build test suite" ON)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
+# Statically link the MSVC C runtime so the driver DLL has no external runtime
+# dependency (no VC++ redistributable required on target machines). Must be set
+# before any target is created. Pair this with the x64-windows-static vcpkg
+# triplet so curl/json-c also use the static CRT.
+option(TRINO_ODBC_STATIC_CRT "Statically link the MSVC runtime (Windows)" OFF)
+if(TRINO_ODBC_STATIC_CRT AND MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # When building against static vcpkg dependencies (x64-windows-static[-md]),
 # the curl/json-c CMake package configs carry the static archives plus their
 # transitive system libraries (ws2_32, crypt32, ...). Prefer CONFIG mode so

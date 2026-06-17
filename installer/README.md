@@ -7,10 +7,13 @@ with the Windows ODBC subsystem (so it appears in the **ODBC Data Source
 Administrator**, `odbcad32.exe`).
 
 curl and json-c are **statically linked** into `trino_odbc.dll` (via the vcpkg
-`x64-windows-static-md` triplet), so there are no dependency DLLs to ship. The
-`-md` triplet links the dependencies statically while keeping the **dynamic
-Universal CRT**, which avoids CRT-mismatch issues and means end users only need
-the standard VC++ runtime that ships with Windows.
+`x64-windows-static` triplet), and the **MSVC C runtime is also statically
+linked** (`TRINO_ODBC_STATIC_CRT=ON`). The result is a fully self-contained
+driver DLL with **no external runtime dependencies** - no dependency DLLs and no
+VC++ redistributable required on target machines. This matters for an ODBC
+driver because the driver manager loads the DLL in arbitrary host processes; a
+missing dependency surfaces as the opaque "system error code 126 / could not be
+found" during driver registration.
 
 ## Prerequisites (on the Windows build machine)
 
@@ -118,6 +121,7 @@ signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 `
 | vcpkg can't download (proxy/firewall) | Set `HTTP_PROXY` / `HTTPS_PROXY`, or pre-install: `vcpkg install curl json-c --triplet x64-windows-static-md`. |
 | `trino_odbc.dll not found under build-windows\src` | The compile step failed earlier - scroll up for the MSVC/CMake error. |
 | `WIX7015: You must accept the Open Source Maintenance Fee (OSMF) EULA` | WiX **v7** gates builds behind the OSMF EULA. Either set `$env:WIX_ACCEPT_OSMF_EULA = "1"` (after reviewing https://wixtoolset.org/osmf/), or use WiX **v5** which has no such gate: `dotnet tool install --global wix --version 5.0.2`. The `.wxs` works unchanged on v4/v5/v7. |
+| Install fails: `system error code 126: The specified module could not be found (...trino_odbc.dll)` | The driver DLL has an unresolved dependency. The build statically links curl/json-c **and** the MSVC CRT, so a freshly-built MSI should be self-contained; ensure you rebuilt after pulling the static-CRT change. To diagnose a DLL's dependencies: `dumpbin /dependents "C:\Program Files\TrinoODBC\bin\trino_odbc.dll"` (look for non-system DLLs). As a stopgap on the failing machine, install the VC++ x64 redistributable: https://aka.ms/vs/17/release/vc_redist.x64.exe |
 
 ## CI
 
