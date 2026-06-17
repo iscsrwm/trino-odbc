@@ -17,6 +17,8 @@ typedef struct {
     SQLCHAR schema[256];
     SQLCHAR auth_type[32];
     bool ssl_enabled;
+    bool ssl_verify;    /* verify TLS cert (default true) */
+    bool ssl_no_revoke; /* skip TLS revocation check (default false) */
     SQLCHAR ssl_truststore[1024];
     SQLCHAR source[128];
     SQLCHAR client_tags[1024];

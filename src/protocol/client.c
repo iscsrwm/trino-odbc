@@ -110,9 +110,23 @@ SQLRETURN trino_http_client_configure(
         if (ssl_truststore) {
             curl_easy_setopt(client->easy_handle, CURLOPT_CAINFO, ssl_truststore);
         }
-        /* Allow verification but permit self-signed in dev */
-        curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYHOST, 2L);
+        if (client->ssl_verify) {
+            curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYPEER, 1L);
+            curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYHOST, 2L);
+        } else {
+            /* Verification disabled (e.g. self-signed/internal CA, dev use). */
+            curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
+            curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
+        }
+
+        /* Certificate revocation checking. On Windows/schannel an unreachable
+         * revocation (CRL/OCSP) server otherwise fails the handshake with
+         * CRYPT_E_REVOCATION_OFFLINE - common on corporate networks. When the
+         * caller sets SSLNoRevoke, skip the revocation check entirely. */
+        if (client->ssl_no_revoke) {
+            curl_easy_setopt(client->easy_handle, CURLOPT_SSL_OPTIONS,
+                             (long)CURLSSLOPT_NO_REVOKE);
+        }
     } else {
         curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(client->easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);

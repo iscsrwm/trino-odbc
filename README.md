@@ -74,6 +74,8 @@ Driver={Trino ODBC};Server=localhost;Port=8080;User=admin;Catalog=memory;Schema=
 | Schema | Default schema | default |
 | Authentication | Auth method | NONE |
 | SSL | Enable TLS | false |
+| SSLVerify | Verify the server certificate (set `false` for self-signed/internal CAs) | true |
+| SSLNoRevoke | Skip the certificate revocation check (set `true` to work around `CRYPT_E_REVOCATION_OFFLINE` when the CRL/OCSP server is unreachable) | false |
 | SSLTrustStoreCertificate | CA certificate path | (system) |
 | QueryTimeout | Query timeout in seconds | 300 |
 | Source | Client identifier | trino-odbc |

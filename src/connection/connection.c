@@ -36,6 +36,8 @@ void trino_conn_config_defaults(trino_conn_config_t *config)
     config->port = 8080;
     strncpy((char *)config->auth_type, "NONE", sizeof(config->auth_type) - 1);
     config->ssl_enabled = false;
+    config->ssl_verify = true; /* verify certificates by default */
+    config->ssl_no_revoke = false;
     strncpy((char *)config->source, "trino-odbc", sizeof(config->source) - 1);
     config->query_timeout = 300;
     config->connect_timeout = 30;
@@ -92,6 +94,18 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
             strncpy((char *)config->auth_type, value, sizeof(config->auth_type) - 1);
         } else if (strcasecmp(key, "SSL") == 0) {
             config->ssl_enabled =
+                (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 ||
+                 strcmp(value, "1") == 0);
+        } else if (strcasecmp(key, "SSLVerify") == 0) {
+            /* SSLVerify=false disables peer/host certificate verification. */
+            config->ssl_verify =
+                !(strcasecmp(value, "false") == 0 || strcasecmp(value, "no") == 0 ||
+                  strcmp(value, "0") == 0);
+        } else if (strcasecmp(key, "SSLNoRevoke") == 0) {
+            /* SSLNoRevoke=true skips the certificate revocation check (fixes
+             * CRYPT_E_REVOCATION_OFFLINE on networks where the CRL/OCSP server
+             * is unreachable). */
+            config->ssl_no_revoke =
                 (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 ||
                  strcmp(value, "1") == 0);
         } else if (strcasecmp(key, "SSLTrustStoreCertificate") == 0) {
@@ -228,6 +242,8 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
     conn->source = strdup((char *)config->source);
     conn->auth_type = strdup((char *)config->auth_type);
     conn->ssl_enabled = config->ssl_enabled;
+    conn->ssl_verify = config->ssl_verify;
+    conn->ssl_no_revoke = config->ssl_no_revoke;
     conn->ssl_truststore = strlen((char *)config->ssl_truststore) > 0
                                ? strdup((char *)config->ssl_truststore)
                                : NULL;
@@ -366,6 +382,10 @@ trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
     trino_http_client_t *client = trino_http_client_create();
     if (!client)
         return NULL;
+
+    /* TLS verification options (read by configure when ssl is enabled). */
+    client->ssl_verify = conn->ssl_verify;
+    client->ssl_no_revoke = conn->ssl_no_revoke;
 
     SQLRETURN ret = trino_http_client_configure(
         client, conn->server, conn->port, conn->user, conn->password, conn->auth_type,

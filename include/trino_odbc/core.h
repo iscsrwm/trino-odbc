@@ -108,6 +108,8 @@ typedef struct {
     /* Authentication */
     char *auth_type; /* NONE, PASSWORD, CERTIFICATE, KERBEROS */
     bool ssl_enabled;
+    bool ssl_verify;    /* verify TLS cert (default true) */
+    bool ssl_no_revoke; /* skip TLS revocation check (default false) */
     char *ssl_truststore;
 
     /* Transaction state */

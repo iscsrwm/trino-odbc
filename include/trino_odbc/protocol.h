@@ -87,6 +87,8 @@ typedef struct trino_http_client_s {
     char *password;
     char *auth_type;
     bool ssl_enabled;
+    bool ssl_verify;    /* verify peer/host cert (default true) */
+    bool ssl_no_revoke; /* skip cert revocation check (default false) */
     char *ssl_truststore;
     char *client_tags_json;
     char *session_properties_json;
