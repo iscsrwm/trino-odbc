@@ -90,7 +90,11 @@ int main(int argc, char *argv[]) {
     
     // 6. Set query timeout (tests SQLSetStmtAttrW)
     printf("6. Setting query timeout...\n");
+    printf("   About to call SQLSetStmtAttr...\n");
+    fflush(stdout);
     rc = SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT, (SQLPOINTER)30, 0);
+    printf("   SQLSetStmtAttr returned: %d\n", rc);
+    fflush(stdout);
     CHECK_ERROR(rc, SQL_HANDLE_STMT, stmt, "Failed to set query timeout");
     printf("   OK\n\n");
     
