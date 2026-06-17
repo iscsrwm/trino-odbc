@@ -1,6 +1,7 @@
 #include "trino_odbc/statement.h"
 #include "trino_odbc/connection.h"
 #include "trino_odbc/resultset.h"
+#include "trino_odbc/log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -587,16 +588,23 @@ SQLRETURN trino_stmt_set_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER va
     (void)str_len;
     pthread_mutex_lock(&stmt->mutex);
 
+    /* SQLSetStmtAttr passes these integer attributes by value in the ValuePtr
+     * argument (cast to a pointer), not as a pointer to the value. Dereferencing
+     * it crashes. Pointer-valued attributes (row-status arrays, bind offsets,
+     * etc.) are not handled here. */
+    SQLUINTEGER uval = (SQLUINTEGER)(SQLULEN)value;
+    SQLULEN ulval = (SQLULEN)value;
+
     switch (attr) {
-        case SQL_ATTR_QUERY_TIMEOUT: stmt->query_timeout = *(SQLUINTEGER *)value; break;
+        case SQL_ATTR_QUERY_TIMEOUT: stmt->query_timeout = uval; break;
 
-        case SQL_ATTR_CURSOR_TYPE: stmt->cursor_type = *(SQLUINTEGER *)value; break;
+        case SQL_ATTR_CURSOR_TYPE: stmt->cursor_type = uval; break;
 
-        case SQL_ATTR_CONCURRENCY: stmt->concurrency = *(SQLUINTEGER *)value; break;
+        case SQL_ATTR_CONCURRENCY: stmt->concurrency = uval; break;
 
-        case SQL_ATTR_MAX_ROWS: stmt->max_rows = *(SQLULEN *)value; break;
+        case SQL_ATTR_MAX_ROWS: stmt->max_rows = ulval; break;
 
-        case SQL_ATTR_ROW_ARRAY_SIZE: stmt->row_array_size = *(SQLULEN *)value; break;
+        case SQL_ATTR_ROW_ARRAY_SIZE: stmt->row_array_size = ulval; break;
 
         default: break;
     }
@@ -672,6 +680,8 @@ SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER va
 SQLRETURN SQLSetConnectAttr(SQLHDBC connection_handle, SQLINTEGER attribute,
                             SQLPOINTER value_ptr, SQLINTEGER string_length)
 {
+    trino_log("SQLSetConnectAttr: attr=%d value=%p", (int)attribute,
+              (void *)value_ptr);
     if (!connection_handle)
         return SQL_INVALID_HANDLE;
 

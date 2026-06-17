@@ -21,16 +21,20 @@ SQLRETURN SQLSetEnvAttr(SQLHENV environment_handle, SQLINTEGER attribute,
 
     pthread_mutex_lock(&env->mutex);
 
+    /* For SQLSetEnvAttr, these integer attributes pass the VALUE itself in the
+     * ValuePtr argument (cast to a pointer), NOT a pointer to the value. e.g.
+     * SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0).
+     * Dereferencing value_ptr therefore reads address 0x3 and crashes. */
+    SQLUINTEGER uval = (SQLUINTEGER)(SQLULEN)value_ptr;
+
     switch (attribute) {
-        case SQL_ATTR_ODBC_VERSION: env->odbc_version = *(SQLUINTEGER *)value_ptr; break;
+        case SQL_ATTR_ODBC_VERSION: env->odbc_version = uval; break;
 
-        case SQL_ATTR_CONNECTION_POOLING:
-            env->connection_pooling = *(SQLUINTEGER *)value_ptr;
-            break;
+        case SQL_ATTR_CONNECTION_POOLING: env->connection_pooling = uval; break;
 
-        case SQL_ATTR_CP_MATCH: env->cp_match = *(SQLUINTEGER *)value_ptr; break;
+        case SQL_ATTR_CP_MATCH: env->cp_match = uval; break;
 
-        case SQL_ATTR_ACCESS_MODE: env->access_mode = *(SQLUINTEGER *)value_ptr; break;
+        case SQL_ATTR_ACCESS_MODE: env->access_mode = uval; break;
 
         default:
             /* Unknown attribute — silently succeed (ODBC allows this) */

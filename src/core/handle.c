@@ -126,6 +126,7 @@ SQLRETURN SQLAllocHandle(SQLSMALLINT handle_type, SQLHANDLE input_handle,
             slot->ptr = (void *)conn;
             slot->type = TRINO_HANDLE_DBC;
             *output_handle = (SQLHANDLE)conn;
+            trino_log("SQLAllocHandle: DBC created conn=%p", (void *)conn);
             pthread_mutex_unlock(&g_pool_mutex);
             return SQL_SUCCESS;
         }

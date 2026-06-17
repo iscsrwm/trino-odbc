@@ -320,24 +320,33 @@ SQLRETURN trino_conn_set_attr(trino_conn_t *conn, SQLINTEGER attr, SQLPOINTER va
 
     pthread_mutex_lock(&conn->mutex);
 
-    switch (attr) {
-        case SQL_ATTR_AUTOCOMMIT: conn->autocommit = (*(SQLUINTEGER *)value != 0); break;
+    /* For SQLSetConnectAttr, integer/“SQLUINTEGER” attributes pass the VALUE
+     * itself in the ValuePtr argument (cast to a pointer), NOT a pointer to the
+     * value. Dereferencing it (e.g. *(SQLUINTEGER*)value) crashes because the
+     * "pointer" is actually a small integer such as 0 or 15. Only string/binary
+     * attributes (e.g. SQL_ATTR_CURRENT_CATALOG) pass a real pointer. */
+    SQLUINTEGER uval = (SQLUINTEGER)(SQLULEN)value;
 
-        case SQL_ATTR_ACCESS_MODE: conn->access_mode = *(SQLUINTEGER *)value; break;
+    switch (attr) {
+        case SQL_ATTR_AUTOCOMMIT: conn->autocommit = (uval != 0); break;
+
+        case SQL_ATTR_ACCESS_MODE: conn->access_mode = uval; break;
 
         case SQL_ATTR_CURRENT_CATALOG: {
             free(conn->current_catalog);
             if (value) {
-                conn->current_catalog = strndup((char *)value, (size_t)str_len);
+                size_t n = (str_len == SQL_NTS || str_len < 0) ? strlen((char *)value)
+                                                               : (size_t)str_len;
+                conn->current_catalog = strndup((char *)value, n);
             } else {
                 conn->current_catalog = NULL;
             }
             break;
         }
 
-        case SQL_ATTR_LOGIN_TIMEOUT: conn->login_timeout = *(SQLUINTEGER *)value; break;
+        case SQL_ATTR_LOGIN_TIMEOUT: conn->login_timeout = uval; break;
 
-        case SQL_ATTR_QUERY_TIMEOUT: conn->query_timeout = *(SQLUINTEGER *)value; break;
+        case SQL_ATTR_QUERY_TIMEOUT: conn->query_timeout = uval; break;
 
         default: break;
     }
