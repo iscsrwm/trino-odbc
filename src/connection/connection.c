@@ -1,5 +1,6 @@
 #include "trino_odbc/connection.h"
 #include "trino_odbc/compat.h"
+#include "trino_odbc/log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -265,6 +266,10 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
         return SQL_ERROR;
     }
 
+    trino_log("trino_conn_connect: validating server=%s port=%d ssl=%d auth=%s",
+              conn->server ? conn->server : "(null)", (int)conn->port,
+              (int)conn->ssl_enabled, conn->auth_type ? conn->auth_type : "(null)");
+
     char err[512] = {0};
     if (trino_http_client_validate(client, err, sizeof(err)) != SQL_SUCCESS) {
         pthread_mutex_lock(&conn->mutex);
@@ -276,9 +281,12 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
         pthread_mutex_unlock(&conn->mutex);
         trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_LOGIN_FAILED, 0,
                              err[0] ? err : "Failed to connect to Trino server");
+        trino_log("trino_conn_connect: validate FAILED: %s",
+                  err[0] ? err : "(no detail)");
         return SQL_ERROR;
     }
 
+    trino_log("trino_conn_connect: validate OK");
     return SQL_SUCCESS;
 }
 

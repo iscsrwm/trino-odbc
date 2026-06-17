@@ -40,6 +40,7 @@ set(ERROR_SOURCES
     ${CMAKE_SOURCE_DIR}/src/error/error.c
     ${CMAKE_SOURCE_DIR}/src/error/state.c
     ${CMAKE_SOURCE_DIR}/src/error/diag.c
+    ${CMAKE_SOURCE_DIR}/src/error/log.c
 )
 
 set(CATALOG_SOURCES

@@ -7,6 +7,7 @@
  */
 #include "trino_odbc/connection.h"
 #include "trino_odbc/protocol.h"
+#include "trino_odbc/log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -144,6 +145,7 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
                              "Missing connection string");
         return SQL_ERROR;
     }
+    trino_log("SQLDriverConnect: in_conn_str=%s", conn_str);
 
     trino_conn_config_t config;
     SQLRETURN ret = trino_parse_conn_string((const SQLCHAR *)conn_str, &config);
@@ -151,6 +153,7 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
         free(conn_str);
         trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
                              "Invalid connection string");
+        trino_log("SQLDriverConnect: parse failed");
         return SQL_ERROR;
     }
 
@@ -159,8 +162,10 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
         free(conn_str);
         /* trino_conn_connect already set a specific diagnostic (e.g. the curl
          * error or HTTP status); do not overwrite it. */
+        trino_log("SQLDriverConnect: trino_conn_connect returned error");
         return SQL_ERROR;
     }
+    trino_log("SQLDriverConnect: connected OK");
 
     /* Echo the (completed) connection string back to the caller. We return the
      * input string as-is, which satisfies applications that store it for
@@ -238,6 +243,7 @@ SQLRETURN SQLDriverConnectW(SQLHDBC connection_handle, SQLHWND window_handle,
                             SQLUSMALLINT driver_completion)
 {
     char *in_utf8 = odbc_wstrdup_utf8(in_conn_str, in_conn_str_len);
+    trino_log("SQLDriverConnectW: entry");
 
     /* Collect the ANSI completed string into a local buffer, then widen it. */
     char ansi_out[2048];
@@ -249,6 +255,7 @@ SQLRETURN SQLDriverConnectW(SQLHDBC connection_handle, SQLHWND window_handle,
 
     free(in_utf8);
 
+    trino_log("SQLDriverConnectW: SQLDriverConnect returned %d", (int)ret);
     if (ret == SQL_ERROR || ret == SQL_INVALID_HANDLE)
         return ret;
 

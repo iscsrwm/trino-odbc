@@ -9,6 +9,7 @@
 #include "trino_odbc/core.h"
 #include "trino_odbc/error.h"
 #include "trino_odbc/protocol.h"
+#include "trino_odbc/log.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -102,6 +103,12 @@ SQLRETURN SQLGetDiagRecW(SQLSMALLINT handle_type, SQLHANDLE handle, SQLSMALLINT 
     trino_diagnostics_t *diag = diag_for_handle(handle_type, handle);
     if (!diag)
         return SQL_INVALID_HANDLE;
+
+    trino_log("SQLGetDiagRecW: rec=%d record_count=%d msg=%s", (int)rec_number,
+              (int)diag->record_count,
+              (diag->record_count >= rec_number)
+                  ? (const char *)diag->records[rec_number - 1].message_text
+                  : "(none)");
 
     if (rec_number > diag->record_count)
         return SQL_NO_DATA;

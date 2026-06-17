@@ -2,6 +2,7 @@
 
 #include "trino_odbc/connection.h"
 #include "trino_odbc/protocol.h"
+#include "trino_odbc/log.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -431,6 +432,8 @@ SQLRETURN SQLGetInfoW(SQLHDBC connection_handle, SQLUSMALLINT info_type,
                       SQLPOINTER info_value, SQLSMALLINT buffer_length,
                       SQLSMALLINT *str_len)
 {
+    trino_log("SQLGetInfoW: info_type=%u buffer_length=%d", (unsigned)info_type,
+              (int)buffer_length);
     if (!info_type_is_string(info_type)) {
         /* Numeric info types are identical in both APIs. */
         return SQLGetInfo(connection_handle, info_type, info_value, buffer_length,
