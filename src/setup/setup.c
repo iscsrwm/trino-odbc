@@ -241,8 +241,24 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
     SQLRETURN ret;
 
     build_conn_str(f, conn_str, sizeof(conn_str));
-    trino_log("Test Connection: built conn_str (password redacted): %.40s...",
-              conn_str);
+    {
+        /* Log the full connection string with the password redacted. */
+        char redacted[4096];
+        char *p;
+        strncpy(redacted, conn_str, sizeof(redacted) - 1);
+        redacted[sizeof(redacted) - 1] = '\0';
+        p = redacted;
+        while (*p) {
+            if (_strnicmp(p, "Password=", 9) == 0) {
+                p += 9;
+                while (*p && *p != ';')
+                    *p++ = '*';
+            } else {
+                p++;
+            }
+        }
+        trino_log("Test Connection: conn_str=%s", redacted);
+    }
 
     ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
     trino_log("Test Connection: SQLAllocHandle(ENV) ret=%d env=%p", (int)ret,
