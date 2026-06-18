@@ -230,7 +230,29 @@ static void build_conn_str(const dsn_fields_t *f, char *out, size_t out_len)
     out[out_len - 1] = '\0';
 }
 
-/* Attempt a live connection through the driver manager and report the result. */
+/* Driver-manager function pointer types (resolved from odbc32.dll at runtime). */
+typedef SQLRETURN(SQL_API *PFN_AllocHandle)(SQLSMALLINT, SQLHANDLE, SQLHANDLE *);
+typedef SQLRETURN(SQL_API *PFN_FreeHandle)(SQLSMALLINT, SQLHANDLE);
+typedef SQLRETURN(SQL_API *PFN_SetEnvAttr)(SQLHENV, SQLINTEGER, SQLPOINTER, SQLINTEGER);
+typedef SQLRETURN(SQL_API *PFN_DriverConnect)(SQLHDBC, SQLHWND, SQLCHAR *, SQLSMALLINT,
+                                              SQLCHAR *, SQLSMALLINT, SQLSMALLINT *,
+                                              SQLUSMALLINT);
+typedef SQLRETURN(SQL_API *PFN_Disconnect)(SQLHDBC);
+typedef SQLRETURN(SQL_API *PFN_GetDiagRec)(SQLSMALLINT, SQLHANDLE, SQLSMALLINT,
+                                           SQLCHAR *, SQLINTEGER *, SQLCHAR *,
+                                           SQLSMALLINT, SQLSMALLINT *);
+
+/* Attempt a live connection through the driver manager and report the result.
+ *
+ * CRITICAL: this code lives inside trino_odbc.dll, which itself EXPORTS the
+ * ODBC API (SQLAllocHandle, etc.). If we called those names directly, the
+ * linker would bind them to our OWN exported driver functions, creating
+ * internal handles the driver manager doesn't recognize - so a later DM call
+ * like SQLDriverConnect (which we do NOT export, so it binds to odbc32.dll)
+ * receives a foreign handle and returns SQL_ERROR before reaching any driver.
+ *
+ * To go cleanly through the driver manager, resolve every ODBC entry point from
+ * odbc32.dll explicitly via GetProcAddress and call those. */
 static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
 {
     char conn_str[4096];
@@ -239,6 +261,13 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
     SQLHDBC dbc = SQL_NULL_HDBC;
     SQLSMALLINT out_len = 0;
     SQLRETURN ret;
+    HMODULE dm;
+    PFN_AllocHandle pAllocHandle;
+    PFN_FreeHandle pFreeHandle;
+    PFN_SetEnvAttr pSetEnvAttr;
+    PFN_DriverConnect pDriverConnect;
+    PFN_Disconnect pDisconnect;
+    PFN_GetDiagRec pGetDiagRec;
 
     build_conn_str(f, conn_str, sizeof(conn_str));
     {
@@ -260,39 +289,56 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
         trino_log("Test Connection: conn_str=%s", redacted);
     }
 
-    ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
-    trino_log("Test Connection: SQLAllocHandle(ENV) ret=%d env=%p", (int)ret,
-              (void *)env);
+    /* Resolve the driver manager entry points explicitly. */
+    dm = LoadLibraryA("odbc32.dll");
+    if (!dm) {
+        MessageBoxA(hdlg, "Could not load the ODBC Driver Manager (odbc32.dll).",
+                    "Test Connection", MB_ICONERROR | MB_OK);
+        return;
+    }
+    pAllocHandle = (PFN_AllocHandle)GetProcAddress(dm, "SQLAllocHandle");
+    pFreeHandle = (PFN_FreeHandle)GetProcAddress(dm, "SQLFreeHandle");
+    pSetEnvAttr = (PFN_SetEnvAttr)GetProcAddress(dm, "SQLSetEnvAttr");
+    pDriverConnect = (PFN_DriverConnect)GetProcAddress(dm, "SQLDriverConnect");
+    pDisconnect = (PFN_Disconnect)GetProcAddress(dm, "SQLDisconnect");
+    pGetDiagRec = (PFN_GetDiagRec)GetProcAddress(dm, "SQLGetDiagRec");
+
+    if (!pAllocHandle || !pFreeHandle || !pSetEnvAttr || !pDriverConnect ||
+        !pDisconnect || !pGetDiagRec) {
+        FreeLibrary(dm);
+        MessageBoxA(hdlg, "Could not resolve ODBC Driver Manager functions.",
+                    "Test Connection", MB_ICONERROR | MB_OK);
+        return;
+    }
+
+    ret = pAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
+    trino_log("Test Connection: DM SQLAllocHandle(ENV) ret=%d", (int)ret);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        FreeLibrary(dm);
         MessageBoxA(hdlg, "Failed to allocate ODBC environment.", "Test Connection",
                     MB_ICONERROR | MB_OK);
         return;
     }
-    ret = SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
-    trino_log("Test Connection: SQLSetEnvAttr(ODBC_VERSION) ret=%d", (int)ret);
+    pSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
 
-    ret = SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc);
-    trino_log("Test Connection: SQLAllocHandle(DBC) ret=%d dbc=%p", (int)ret,
-              (void *)dbc);
+    ret = pAllocHandle(SQL_HANDLE_DBC, env, &dbc);
+    trino_log("Test Connection: DM SQLAllocHandle(DBC) ret=%d", (int)ret);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        SQLFreeHandle(SQL_HANDLE_ENV, env);
+        pFreeHandle(SQL_HANDLE_ENV, env);
+        FreeLibrary(dm);
         MessageBoxA(hdlg, "Failed to allocate ODBC connection.", "Test Connection",
                     MB_ICONERROR | MB_OK);
         return;
     }
 
-    /* Pass a NULL window handle with SQL_DRIVER_NOPROMPT: we never want the DM to
-     * try to pop its own prompt dialog, and some DM versions return SQL_ERROR if
-     * given a window handle together with NOPROMPT. */
-    ret = SQLDriverConnectA(dbc, NULL, (SQLCHAR *)conn_str, SQL_NTS,
-                            (SQLCHAR *)out_str, sizeof(out_str), &out_len,
-                            SQL_DRIVER_NOPROMPT);
-    trino_log("Test Connection: SQLDriverConnectA ret=%d", (int)ret);
+    ret = pDriverConnect(dbc, NULL, (SQLCHAR *)conn_str, SQL_NTS, (SQLCHAR *)out_str,
+                         sizeof(out_str), &out_len, SQL_DRIVER_NOPROMPT);
+    trino_log("Test Connection: DM SQLDriverConnect ret=%d", (int)ret);
 
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         MessageBoxA(hdlg, "Connection successful.", "Test Connection",
                     MB_ICONINFORMATION | MB_OK);
-        SQLDisconnect(dbc);
+        pDisconnect(dbc);
     } else {
         char msg[2048];
         size_t pos = 0;
@@ -305,18 +351,14 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
         pos += (size_t)_snprintf(msg + pos, sizeof(msg) - pos,
                                  "Connection failed (rc=%d).\n", (int)ret);
 
-        /* Collect all diagnostic records from both the connection and the
-         * environment handle. The relevant error may sit on either, and there
-         * can be more than one record. */
         for (h = 0; h < 2 && pos < sizeof(msg) - 1; h++) {
             for (rec = 1; pos < sizeof(msg) - 1; rec++) {
                 SQLCHAR sqlstate[6] = {0};
                 SQLCHAR diag[900] = {0};
                 SQLINTEGER native = 0;
                 SQLSMALLINT diag_len = 0;
-                SQLRETURN dr = SQLGetDiagRec(handle_kinds[h], handles[h], rec,
-                                             sqlstate, &native, diag, sizeof(diag),
-                                             &diag_len);
+                SQLRETURN dr = pGetDiagRec(handle_kinds[h], handles[h], rec, sqlstate,
+                                           &native, diag, sizeof(diag), &diag_len);
                 if (dr != SQL_SUCCESS && dr != SQL_SUCCESS_WITH_INFO)
                     break;
                 found++;
@@ -336,8 +378,9 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
         MessageBoxA(hdlg, msg, "Test Connection", MB_ICONERROR | MB_OK);
     }
 
-    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
-    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    pFreeHandle(SQL_HANDLE_DBC, dbc);
+    pFreeHandle(SQL_HANDLE_ENV, env);
+    FreeLibrary(dm);
 }
 
 /* ------------------------------------------------------------------------
