@@ -28,6 +28,7 @@
 #include <stdlib.h>
 
 #include "resource.h"
+#include "trino_odbc/log.h"
 
 /* The module handle of this DLL, captured in DllMain, needed to load the
  * dialog resource. */
@@ -240,24 +241,37 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
     SQLRETURN ret;
 
     build_conn_str(f, conn_str, sizeof(conn_str));
+    trino_log("Test Connection: built conn_str (password redacted): %.40s...",
+              conn_str);
 
-    if (SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env) != SQL_SUCCESS) {
+    ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
+    trino_log("Test Connection: SQLAllocHandle(ENV) ret=%d env=%p", (int)ret,
+              (void *)env);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         MessageBoxA(hdlg, "Failed to allocate ODBC environment.", "Test Connection",
                     MB_ICONERROR | MB_OK);
         return;
     }
-    SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
+    ret = SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
+    trino_log("Test Connection: SQLSetEnvAttr(ODBC_VERSION) ret=%d", (int)ret);
 
-    if (SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc) != SQL_SUCCESS) {
+    ret = SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc);
+    trino_log("Test Connection: SQLAllocHandle(DBC) ret=%d dbc=%p", (int)ret,
+              (void *)dbc);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         SQLFreeHandle(SQL_HANDLE_ENV, env);
         MessageBoxA(hdlg, "Failed to allocate ODBC connection.", "Test Connection",
                     MB_ICONERROR | MB_OK);
         return;
     }
 
-    ret = SQLDriverConnectA(dbc, (SQLHWND)hdlg, (SQLCHAR *)conn_str, SQL_NTS,
+    /* Pass a NULL window handle with SQL_DRIVER_NOPROMPT: we never want the DM to
+     * try to pop its own prompt dialog, and some DM versions return SQL_ERROR if
+     * given a window handle together with NOPROMPT. */
+    ret = SQLDriverConnectA(dbc, NULL, (SQLCHAR *)conn_str, SQL_NTS,
                             (SQLCHAR *)out_str, sizeof(out_str), &out_len,
                             SQL_DRIVER_NOPROMPT);
+    trino_log("Test Connection: SQLDriverConnectA ret=%d", (int)ret);
 
     if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
         MessageBoxA(hdlg, "Connection successful.", "Test Connection",
