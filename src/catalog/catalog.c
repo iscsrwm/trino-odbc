@@ -25,15 +25,23 @@ static void build_pattern(const SQLCHAR *pattern, SQLSMALLINT pattern_len, char 
         out[i++] = '\'';
         size_t p = 0;
         size_t plen = (size_t)pattern_len;
-        while (p < plen && i < out_size - 3) {
-            if (pattern[p] == '_') {
+        /* Leave room for: appended '%', closing quote, NUL, and a possible
+         * doubled quote/escape on the last copied char (worst case 2 bytes). */
+        while (p < plen && i < out_size - 4) {
+            char c = (char)pattern[p];
+            if (c == '\'') {
+                /* Escape single quotes by doubling to prevent SQL injection
+                 * through the quoted LIKE literal. */
+                out[i++] = '\'';
+                out[i++] = '\'';
+            } else if (c == '_') {
                 out[i++] = '\\';
                 out[i++] = '_';
-            } else if (pattern[p] == '%') {
+            } else if (c == '%') {
                 out[i++] = '\\';
                 out[i++] = '%';
             } else {
-                out[i++] = (char)pattern[p];
+                out[i++] = c;
             }
             p++;
         }
