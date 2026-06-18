@@ -286,11 +286,7 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
 {
     (void)length;
 
-    trino_log("trino_stmt_exec_direct: ENTRY sql=%s", sql ? (const char *)sql : "(null)");
-
     if (!stmt || !sql || !stmt->conn) {
-        trino_log("trino_stmt_exec_direct: invalid args stmt=%p sql=%p conn=%p",
-                  (void *)stmt, (const void *)sql, stmt ? (void *)stmt->conn : NULL);
         if (stmt) {
             trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
                                  "Invalid connection");
@@ -384,16 +380,12 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
         stmt->column_count = results->column_count;
 
         /* Update IRD with column metadata */
-        trino_log("exec_direct: column_count=%lu columns=%p",
-                  (unsigned long)results->column_count, (void *)results->columns);
         if (results->columns && results->column_count > 0) {
             for (SQLULEN i = 0; i < results->column_count; i++) {
                 trino_column_meta_t *col = &results->columns[i];
                 trino_desc_record_t *rec = &stmt->ird->records[i];
                 rec->sql_type = col->odbc_type;
                 rec->nullable = col->nullable;
-                trino_log("exec_direct: col[%lu] name=%s type=%s odbc_type=%d",
-                          (unsigned long)i, col->name, col->type, (int)col->odbc_type);
                 /* column_name/type_name are TRINO_MAX_IDENTIFIER_LEN+1 bytes;
                  * copy at most LEN bytes and always NUL-terminate. */
                 strncpy((char *)rec->column_name, (char *)col->name,
@@ -530,9 +522,6 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 
     trino_desc_record_t *rec = &stmt->ird->records[col - 1];
 
-    trino_log("trino_stmt_col_attribute: col=%u field=%d sql_type=%d", (unsigned)col,
-              (int)field, (int)rec->sql_type);
-
     switch (field) {
         case SQL_DESC_LABEL:
         case SQL_DESC_NAME:
@@ -619,11 +608,9 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 SQLRETURN SQLDescribeCol(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
                          SQLCHAR *column_name, SQLSMALLINT buffer_length,
                          SQLSMALLINT *name_length, SQLSMALLINT *data_type,
-                         SQLULEN *column_size, SQLSMALLINT *decimal_digits,
-                         SQLSMALLINT *nullable)
+                          SQLULEN *column_size, SQLSMALLINT *decimal_digits,
+                          SQLSMALLINT *nullable)
 {
-    trino_log("SQLDescribeCol: col=%u stmt=%p", (unsigned)column_number,
-              (void *)statement_handle);
     if (!statement_handle)
         return SQL_INVALID_HANDLE;
 
@@ -675,15 +662,12 @@ SQLRETURN SQLDescribeCol(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
 SQLRETURN SQLSetStmtAttr(SQLHSTMT statement_handle, SQLINTEGER attribute,
                          SQLPOINTER value_ptr, SQLINTEGER string_length)
 {
-    trino_log("SQLSetStmtAttr: entry attr=%d stmt=%p", (int)attribute, (void *)statement_handle);
     if (!statement_handle)
         return SQL_INVALID_HANDLE;
 
     trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
-    if (!trino_stmt_valid(stmt)) {
-        trino_log("SQLSetStmtAttr: invalid statement handle");
+    if (!trino_stmt_valid(stmt))
         return SQL_INVALID_HANDLE;
-    }
 
     return trino_stmt_set_attr(stmt, attribute, value_ptr, string_length);
 }

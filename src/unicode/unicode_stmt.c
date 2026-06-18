@@ -89,20 +89,14 @@ SQLRETURN SQL_API SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER val
 {
     /* Statement attributes are all numeric (by value) or pointer-typed; no
      * string attributes, so delegate directly to the ANSI version. */
-    trino_log("SQLSetStmtAttrW: entry attr=%d stmt=%p", (int)attr, (void *)stmt);
-    SQLRETURN ret = SQLSetStmtAttr(stmt, attr, value, str_len);
-    trino_log("SQLSetStmtAttrW: exit ret=%d", ret);
-    return ret;
+    return SQLSetStmtAttr(stmt, attr, value, str_len);
 }
 
 SQLRETURN SQL_API SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
                           SQLINTEGER buffer_length, SQLINTEGER *str_len)
 {
     /* Same reasoning as SQLSetStmtAttrW: no string attributes. */
-    trino_log("SQLGetStmtAttrW: entry attr=%d stmt=%p", (int)attr, (void *)stmt);
-    SQLRETURN ret = SQLGetStmtAttr(stmt, attr, value, buffer_length, str_len);
-    trino_log("SQLGetStmtAttrW: exit ret=%d", ret);
-    return ret;
+    return SQLGetStmtAttr(stmt, attr, value, buffer_length, str_len);
 }
 
 /* ========================================================================
