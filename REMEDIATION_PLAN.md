@@ -3,12 +3,119 @@
 Ordered by priority. Each item lists the problem, the fix, the files involved,
 and rough effort. See `PROJECT_STATUS.md` for the current assessment.
 
-> **Status (2026-06-18):** All P0 blockers are **DONE** — the driver connects,
-> executes, and returns result sets through a real ODBC Driver Manager, verified
-> on Windows from .NET and on Linux under sanitizers. P1.1 and P1.2 are also
-> done. Remaining work (P1.3–P1.5, P2, P3) is hardening, test coverage, and
-> tooling. A Windows setup GUI (`ConfigDSN`) and DSN resolution were added on top
-> of the original plan (see "Post-plan work" at the end).
+> **Status (2026-06-18):** The *original* P0 blockers (return-code ABI, row
+> parsing, pagination, parameter substitution, connect entry points) are **DONE**
+> — the driver connects, executes, and returns result sets through a real ODBC
+> Driver Manager, verified on Windows from .NET and on Linux under sanitizers. A
+> Windows setup GUI (`ConfigDSN`) and DSN resolution were added on top of the
+> original plan (see "Post-plan work").
+>
+> A **code-grounded production-readiness audit (2026-06-18)** then found a set of
+> correctness gaps behind the working common path. Those are tracked below as the
+> **current backlog** and supersede the original P0–P3 list (kept further down for
+> history).
+
+---
+
+## Current backlog — production-readiness audit (2026-06-18)
+
+Priorities here are the authoritative TODO list. Items verified against the
+source. `(R#)` keys are stable references.
+
+### PR0 — Correctness blockers (fail in real-world deployments)
+
+#### PR0.1 — Send required Trino protocol headers — IN PROGRESS
+- **Problem:** Only `X-Trino-Source` and `X-Trino-Client-Tags` are sent
+  (`src/protocol/client.c:382-384`). Trino **requires `X-Trino-User`** on every
+  `/v1/statement` request, and the configured `Catalog`/`Schema` must be sent as
+  `X-Trino-Catalog`/`X-Trino-Schema` to set session context. Without these,
+  default-secured servers reject requests and the catalog/schema only affect the
+  catalog SQL functions, not the session.
+- **Fix:** Add `X-Trino-User` (from `client->user`; fall back to a sane default
+  only if empty), `X-Trino-Catalog`, and `X-Trino-Schema` headers in
+  `perform_request`/the statement POST. Thread `catalog`/`schema` into the HTTP
+  client.
+- **Files:** `src/protocol/client.c`, `src/protocol/client.h`,
+  `src/connection/connection.c`.
+
+#### PR0.2 — ClientTags / SessionProperties are silently dropped — TODO
+- **Problem:** `trino_conn_connect` copies most config fields but **not**
+  `client_tags`/`session_properties` into `conn->client_tags_json`/
+  `conn->session_properties_json` (`src/connection/connection.c:398-415`), so they
+  stay NULL and are never transmitted. `request.c`'s builders for these are dead
+  code.
+- **Fix:** Copy the two fields in `trino_conn_connect`; ensure the client sends
+  `X-Trino-Session` for session properties (and verify the tags format).
+- **Files:** `src/connection/connection.c`, `src/protocol/client.c`.
+
+#### PR0.3 — SQL injection in catalog pattern building — TODO
+- **Problem:** `build_pattern` (`src/catalog/catalog.c:14-44`) escapes LIKE
+  wildcards (`_`,`%`) but **not single quotes**, and all catalog functions
+  (`SQLTables`/`SQLColumns`/`SQLPrimaryKeys`/…) build SQL via `snprintf` with the
+  pattern inlined into a quoted literal. A pattern containing `'` injects SQL.
+- **Fix:** Escape `'` → `''` in the pattern (and anywhere catalog identifiers are
+  inlined). Add a unit test with a quote-containing pattern.
+- **Files:** `src/catalog/catalog.c`.
+
+#### PR0.4 — SQL_C_BINARY returns base64 text, not bytes — TODO
+- **Problem:** Trino returns `varbinary` as base64 text; `copy_binary_out`
+  (`src/resultset/resultset.c:328`) copies the raw string via `strlen`, so
+  `SQL_C_BINARY` yields the base64 string and truncates at embedded NULs.
+- **Fix:** Base64-decode `varbinary` cells for `SQL_C_BINARY` (and report correct
+  octet length). Add an e2e test with binary data.
+- **Files:** `src/resultset/resultset.c`.
+
+### PR1 — High (correctness/safety; common tools hit these)
+
+- **(R5) `SQLGetTypeInfo` missing entirely** — Core ODBC conformance gap; add it
+  (and to the `.def` + `SQLGetFunctions` bitmap). `src/statement/` + `info.c`.
+- **(R6) `SQLStatistics`/`SQLSpecialColumns` query non-existent Trino tables**
+  (`information_schema.statistics`, `COLUMN_KEY`/`BUCKET`). Make them return an
+  empty result set (or real metadata where available) instead of erroring.
+  `src/catalog/catalog.c`.
+- **(R7) `static char userpass[1024]`** in `src/auth/auth.c:42` — thread-unsafe
+  credential buffer; use a caller-supplied/heap buffer freed after use.
+- **(R8) `SQL_C_DEFAULT` unhandled** in `SQLGetData` (`resultset.c` default case)
+  — map to the column's default C type instead of always string.
+- **(R9) Decimal precision/scale lost** — parse `decimal(p,s)` into the descriptor
+  so `SQLDescribeCol`/`SQLColAttribute` report precision/scale.
+  `src/protocol/response.c`, descriptor population in `src/statement/statement.c`.
+- **(R10) Connection-string `ConnectTimeout`/`QueryTimeout` ignored** — propagate
+  config timeouts into the HTTP client (`client.c:37-38` hard-codes 30/300).
+- **(R11) `SQLBindCol` not applied at fetch** — either implement column-wise
+  binding on `SQLFetch` or document/return appropriately. `src/resultset/`.
+
+### PR2 — Medium (robustness, completeness, distribution)
+
+- **(R12) Missing SQLSTATEs** on `SQL_ERROR` paths (`SQLGetData` invalid
+  column/overflow → `07009`/`22003`/`22018`; NULL output pointers → `HY009`).
+- **(R13) Timestamp fraction mis-scaled** (assumes µs) and timezone-typed
+  temporals fail to parse. `src/resultset/resultset.c`.
+- **(R14) No 32-bit (x86) build** — add a Win32 target/triplet + MSI for 32-bit
+  hosts (e.g. 32-bit Excel).
+- **(R15) Code signing** — sign the DLL and MSI (`signtool`) for distribution.
+- **(R16) `SQLGetFunctions` bitmap inconsistent** with `.def` exports — reconcile.
+- **(R17) Hard-coded `SQL_DBMS_VER "357.1"`** (`info.c:128`) — report the real
+  server version (from the Trino response/`X-Trino-…` or a query).
+
+### PR3 — Lower (hygiene, CI, tooling)
+
+- **(R18) CI gaps:** Windows build is manual-only; the `analyze` jobs aren't
+  `allow_failure` despite the "advisory" comment; no Valgrind/Windows-ASan;
+  sanitizers don't cover the live curl path.
+- **(R19) Test debt:** remove orphan integration stubs
+  (`test/integration/test_connect.c`/`test_query.c`/`test_resultset.c`); fix
+  vacuous unit tests that assert `x == x`.
+- **(R20) Misc:** `src/CMakeLists.txt` hardcodes `add_library(... SHARED ...)`
+  (ignores `BUILD_SHARED_LIBS`); no proxy config; unchecked `calloc` in curl
+  write callbacks (`client.c:259,310,502`).
+
+---
+
+## (Historical) original remediation plan
+
+The items below are the original (2026-06-16) plan. P0.1–P0.5, P1.1, P1.2 are
+done; retained for history.
 
 ---
 
