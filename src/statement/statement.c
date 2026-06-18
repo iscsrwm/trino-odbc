@@ -286,7 +286,11 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
 {
     (void)length;
 
+    trino_log("trino_stmt_exec_direct: ENTRY sql=%s", sql ? (const char *)sql : "(null)");
+
     if (!stmt || !sql || !stmt->conn) {
+        trino_log("trino_stmt_exec_direct: invalid args stmt=%p sql=%p conn=%p",
+                  (void *)stmt, (const void *)sql, stmt ? (void *)stmt->conn : NULL);
         if (stmt) {
             trino_diag_set_error(&stmt->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,
                                  "Invalid connection");
