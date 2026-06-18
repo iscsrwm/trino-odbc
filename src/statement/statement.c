@@ -546,12 +546,11 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
             }
             break;
 
-        /* .NET queries SQL_DESC_CONCISE_TYPE (and the legacy SQL_COLUMN_TYPE,
-         * which shares value 2) to map the column to a CLR type. Both must
-         * return the concise SQL type, not 0. */
+        /* .NET queries SQL_DESC_CONCISE_TYPE (value 2, same as the legacy
+         * SQL_COLUMN_TYPE) to map the column to a CLR type. It must return the
+         * concise SQL type, not 0. SQL_DESC_TYPE (1099) is the verbose type. */
         case SQL_DESC_TYPE:
-        case SQL_DESC_CONCISE_TYPE:
-        case SQL_COLUMN_TYPE:
+        case SQL_DESC_CONCISE_TYPE: /* == SQL_COLUMN_TYPE (2) */
             if (numeric_attr)
                 *numeric_attr = (SQLLEN)rec->sql_type;
             break;
@@ -563,7 +562,6 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 
         case SQL_DESC_LENGTH:
         case SQL_DESC_OCTET_LENGTH:
-        case SQL_COLUMN_LENGTH:
             if (numeric_attr)
                 *numeric_attr = (SQLLEN)rec->column_size;
             break;
