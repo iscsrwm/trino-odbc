@@ -87,10 +87,12 @@ SQLRETURN SQL_API SQLPrepareW(SQLHSTMT stmt, SQLWCHAR *text, SQLINTEGER text_len
 SQLRETURN SQL_API SQLSetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,
                                    SQLINTEGER str_len)
 {
-    /* Return SQL_ERROR with option not implemented to signal .NET that
-     * this attribute setting should be skipped. */
-    (void)stmt; (void)attr; (void)value; (void)str_len;
-    return SQL_ERROR;
+    /* Statement attributes are all numeric (by value) or pointer-typed; no
+     * string attributes, so delegate directly to the ANSI version. */
+    trino_log("SQLSetStmtAttrW: entry attr=%d stmt=%p", (int)attr, (void *)stmt);
+    SQLRETURN ret = SQLSetStmtAttr(stmt, attr, value, str_len);
+    trino_log("SQLSetStmtAttrW: exit ret=%d", ret);
+    return ret;
 }
 
 SQLRETURN SQL_API SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER value,

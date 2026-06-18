@@ -130,9 +130,16 @@ trino_stmt_t *trino_stmt_create(trino_conn_t *conn)
     trino_diag_init(&stmt->diagnostics);
     pthread_mutex_init(&stmt->mutex, NULL);
 
-    /* Create internal descriptors */
+    /* Create the four automatically-allocated descriptors (APD, IPD, ARD, IRD).
+     * The Driver Manager queries these via SQLGetStmtAttr immediately after the
+     * statement is allocated (SQL_ATTR_APP_ROW_DESC, SQL_ATTR_APP_PARAM_DESC,
+     * SQL_ATTR_IMP_ROW_DESC, SQL_ATTR_IMP_PARAM_DESC). They MUST be real,
+     * distinct, non-NULL handles, otherwise the DM stores garbage and later
+     * crashes dereferencing them in SQLSetStmtAttr. */
     stmt->ird = trino_desc_create();
     stmt->ard = trino_desc_create();
+    stmt->ipd = trino_desc_create();
+    stmt->apd = trino_desc_create();
 
     if (conn) {
         trino_conn_register_stmt(conn, stmt);
@@ -160,6 +167,8 @@ void trino_stmt_destroy(trino_stmt_t *stmt)
 
     if (stmt->ipd)
         trino_desc_destroy(stmt->ipd);
+    if (stmt->apd)
+        trino_desc_destroy(stmt->apd);
     if (stmt->ird)
         trino_desc_destroy(stmt->ird);
     if (stmt->ard)
@@ -668,6 +677,35 @@ SQLRETURN trino_stmt_get_attr(trino_stmt_t *stmt, SQLINTEGER attr, SQLPOINTER va
             *(SQLULEN *)value = stmt->row_array_size;
             if (str_len)
                 *str_len = (SQLINTEGER)sizeof(SQLULEN);
+            break;
+
+        /* The Driver Manager queries the four automatically-allocated descriptor
+         * handles right after allocating the statement. Return the real handles.
+         * Returning SUCCESS without writing here (the old default) left the DM's
+         * buffer uninitialized, so the DM stored garbage descriptor pointers and
+         * later crashed in odbc32!SetStmtAttr dereferencing them. */
+        case SQL_ATTR_APP_ROW_DESC:
+            *(SQLHDESC *)value = (SQLHDESC)stmt->ard;
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLHDESC);
+            break;
+
+        case SQL_ATTR_APP_PARAM_DESC:
+            *(SQLHDESC *)value = (SQLHDESC)stmt->apd;
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLHDESC);
+            break;
+
+        case SQL_ATTR_IMP_ROW_DESC:
+            *(SQLHDESC *)value = (SQLHDESC)stmt->ird;
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLHDESC);
+            break;
+
+        case SQL_ATTR_IMP_PARAM_DESC:
+            *(SQLHDESC *)value = (SQLHDESC)stmt->ipd;
+            if (str_len)
+                *str_len = (SQLINTEGER)sizeof(SQLHDESC);
             break;
 
         default: pthread_mutex_unlock(&stmt->mutex); return SQL_SUCCESS;

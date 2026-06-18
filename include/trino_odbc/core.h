@@ -155,11 +155,12 @@ typedef struct trino_stmt_s {
 
     /* Parameters */
     SQLULEN param_count;
-    trino_descriptor_t *ipd; /* Internal Parameter Descriptor */
+    trino_descriptor_t *ipd; /* Implementation Parameter Descriptor */
+    trino_descriptor_t *apd; /* Application Parameter Descriptor */
 
     /* Results */
     SQLULEN column_count;
-    trino_descriptor_t *ird; /* Internal Row Descriptor */
+    trino_descriptor_t *ird; /* Implementation Row Descriptor */
     trino_descriptor_t *ard; /* Application Row Descriptor */
 
     /* Result set */
