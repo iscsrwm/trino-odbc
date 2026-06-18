@@ -380,12 +380,16 @@ SQLRETURN trino_stmt_exec_direct(trino_stmt_t *stmt, const SQLCHAR *sql,
         stmt->column_count = results->column_count;
 
         /* Update IRD with column metadata */
+        trino_log("exec_direct: column_count=%lu columns=%p",
+                  (unsigned long)results->column_count, (void *)results->columns);
         if (results->columns && results->column_count > 0) {
             for (SQLULEN i = 0; i < results->column_count; i++) {
                 trino_column_meta_t *col = &results->columns[i];
                 trino_desc_record_t *rec = &stmt->ird->records[i];
                 rec->sql_type = col->odbc_type;
                 rec->nullable = col->nullable;
+                trino_log("exec_direct: col[%lu] name=%s type=%s odbc_type=%d",
+                          (unsigned long)i, col->name, col->type, (int)col->odbc_type);
                 /* column_name/type_name are TRINO_MAX_IDENTIFIER_LEN+1 bytes;
                  * copy at most LEN bytes and always NUL-terminate. */
                 strncpy((char *)rec->column_name, (char *)col->name,
@@ -522,9 +526,13 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 
     trino_desc_record_t *rec = &stmt->ird->records[col - 1];
 
+    trino_log("trino_stmt_col_attribute: col=%u field=%d sql_type=%d", (unsigned)col,
+              (int)field, (int)rec->sql_type);
+
     switch (field) {
         case SQL_DESC_LABEL:
         case SQL_DESC_NAME:
+        case SQL_DESC_BASE_COLUMN_NAME:
             if (char_attr && buffer_length > 0) {
                 strncpy((char *)char_attr, (char *)rec->column_name,
                         (size_t)buffer_length - 1);
@@ -534,9 +542,36 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
             }
             break;
 
+        /* .NET queries SQL_DESC_CONCISE_TYPE (and the legacy SQL_COLUMN_TYPE,
+         * which shares value 2) to map the column to a CLR type. Both must
+         * return the concise SQL type, not 0. */
         case SQL_DESC_TYPE:
+        case SQL_DESC_CONCISE_TYPE:
+        case SQL_COLUMN_TYPE:
             if (numeric_attr)
                 *numeric_attr = (SQLLEN)rec->sql_type;
+            break;
+
+        case SQL_DESC_UNSIGNED:
+            if (numeric_attr)
+                *numeric_attr = SQL_FALSE;
+            break;
+
+        case SQL_DESC_LENGTH:
+        case SQL_DESC_OCTET_LENGTH:
+        case SQL_COLUMN_LENGTH:
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)rec->column_size;
+            break;
+
+        case SQL_DESC_FIXED_PREC_SCALE:
+            if (numeric_attr)
+                *numeric_attr = SQL_FALSE;
+            break;
+
+        case SQL_DESC_COUNT:
+            if (numeric_attr)
+                *numeric_attr = (SQLLEN)stmt->ird->record_count;
             break;
 
         case SQL_DESC_TYPE_NAME:
@@ -622,6 +657,10 @@ SQLRETURN SQLDescribeCol(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
         *decimal_digits = rec->decimal_digits;
     if (nullable)
         *nullable = rec->nullable;
+
+    trino_log("SQLDescribeCol: col=%u name=%s sql_type=%d size=%lu",
+              (unsigned)column_number, rec->column_name, (int)rec->sql_type,
+              (unsigned long)rec->column_size);
 
     pthread_mutex_unlock(&stmt->mutex);
     return SQL_SUCCESS;
