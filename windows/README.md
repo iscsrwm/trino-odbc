@@ -1,21 +1,32 @@
-# Trino ODBC Driver - Windows Package
+# Trino ODBC Driver - Manual Windows Install
 
-## Files Included
+> **The recommended way to install on Windows is the MSI** — see
+> [`../installer/README.md`](../installer/README.md). It builds a single
+> self-contained DLL and registers the driver (and setup GUI) for you. The
+> manual steps below are for development or environments where the MSI is not
+> used.
+
+## Files in this directory
 
 ```
-trino-odbc-windows-x64/
-├── bin/
-│   └── trino_odbc.dll          # ODBC driver DLL (requires compilation)
+windows/
 ├── etc/
-│   ├── odbcinst.ini            # Driver installation config
+│   ├── odbcinst.ini            # Driver registration (INI form)
 │   └── odbc.ini                # Sample DSN configuration
 ├── install.bat                 # Automated installer script
-└── install.reg                 # Registry entries for manual installation
+├── install.reg                 # Registry entries for manual installation
+└── README.md                   # this file
 ```
+
+You build `trino_odbc.dll` yourself (see *Build from Source* below) and place it
+at `C:\Program Files\TrinoODBC\bin\`.
+
+> The single `trino_odbc.dll` is **both** the ODBC driver and the setup-GUI DLL;
+> the registry entries point `Driver` and `Setup` at the same file.
 
 ## Prerequisites
 
-- Windows 7/8/10/11 (64-bit)
+- Windows 10/11 (64-bit)
 - ODBC Driver Manager (included with Windows)
 
 ## Installation
@@ -39,45 +50,58 @@ install.bat
 
 After installation:
 
-1. Open ODBC Data Sources (64-bit):
+1. Open **ODBC Data Source Administrator (64-bit)**:
    ```
-   C:\Windows\SysWOW64\odbcad32.exe  # 32-bit
-   C:\Windows\System32\odbcad32.exe  # 64-bit
+   C:\Windows\System32\odbcad32.exe
    ```
+   (The driver is 64-bit; the 32-bit administrator in `SysWOW64` will not show it.)
 
-2. Go to "System DSN" tab and click "Add"
-3. Select "Trino ODBC Driver"
+2. Go to the **System DSN** (or **User DSN**) tab and click **Add**.
+3. Select **Trino ODBC Driver**. The Trino setup dialog opens.
 4. Configure your connection:
-   - **Host**: Your Trino server hostname
-   - **Port**: Default `8080`
-   - **Schema**: `default`
-   - **Catalog**: `trino`
-   - **Authentication**: Choose appropriate mechanism
+   - **Server**: Your Trino coordinator hostname
+   - **Port**: e.g. `443` (TLS) or `8080`
+   - **Catalog** / **Schema**: e.g. `tpch` / `tiny`
+   - **User** / **Password**
+   - **Authentication**: `NONE`, `PASSWORD`, `CERTIFICATE`, or `KERBEROS`
+   - **TLS/SSL**: enable and set certificate verification as appropriate
+5. Click **Test Connection** to verify, then **OK** to save the DSN.
+
+You can then connect using just the DSN name, e.g. `DSN=YourDsnName`.
 
 ## Build from Source
 
-To build the DLL on Windows:
+The recommended build is the MSI (single self-contained DLL). See
+[`../installer/README.md`](../installer/README.md) and
+[`../BUILD_WINDOWS.md`](../BUILD_WINDOWS.md).
+
+In short, from a Developer shell at the repo root:
 
 ```powershell
-cd trino-odbc-driver
-mkdir build && cd build
-cmake -DCMAKE_GENERATOR="Visual Studio 17 2022" ..
-cmake --build . --config Release
+$env:VCPKG_ROOT = "C:\path\to\vcpkg"
+cmake --preset windows-x64
+cmake --build --preset windows-x64
+# DLL: build-windows\src\trino_odbc.dll
 ```
-
-The compiled `trino_odbc.dll` should be placed in the `bin/` folder.
 
 ## Troubleshooting
 
 ### Driver not found
-- Ensure DLL is in the correct path: `C:\Program Files\TrinoODBC\bin\`
-- Verify registry entries are imported correctly
+- Ensure the DLL is at `C:\Program Files\TrinoODBC\bin\trino_odbc.dll`
+- Verify the `ODBCINST.INI` registry entries (64-bit view) are present
+- Use the 64-bit `odbcad32.exe`
+
+### Configure button does nothing
+- The `Setup` registry value must point at `trino_odbc.dll` (the driver DLL also
+  contains the setup GUI). The bundled `install.reg` sets this.
 
 ### Connection failures
-- Check Trino server is accessible
+- Check the Trino server is reachable from this machine
 - Verify authentication credentials
 - Ensure SSL settings match your Trino configuration
+- Set `TRINO_ODBC_LOG` to a writable file path to capture a driver trace
 
 ## Support
 
-For issues or questions, please refer to the main project documentation.
+For issues or questions, please refer to the main project documentation
+([`../README.md`](../README.md)).

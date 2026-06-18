@@ -1,14 +1,14 @@
 Trino ODBC Driver DLL for Windows
 
-This DLL must be compiled separately using Visual Studio Build Tools.
+Place the built trino_odbc.dll in this directory (for the manual install flow),
+or install the MSI which puts it in C:\Program Files\TrinoODBC\bin.
 
-To build:
-1. Install Visual Studio 2022 (Community or Build Tools)
-2. Clone this repository to your Windows machine
-3. Run:
-   cd trino-odbc-driver
-   mkdir build && cd build
-   cmake -DCMAKE_GENERATOR="Visual Studio 17 2022" ..
-   cmake --build . --config Release
+To build the DLL (from a Visual Studio "x64 Native Tools" / Developer shell at
+the repository root, with VCPKG_ROOT set):
 
-The compiled DLL will be at: build\src\Release\trino_odbc.dll
+   cmake --preset windows-x64
+   cmake --build --preset windows-x64
+
+The compiled DLL will be at: build-windows\src\trino_odbc.dll
+
+See ..\..\BUILD_WINDOWS.md and ..\..\installer\README.md for full details.

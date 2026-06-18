@@ -1,83 +1,56 @@
 # Remediation Plan: Trino ODBC Driver → Production Quality
 
 Ordered by priority. Each item lists the problem, the fix, the files involved,
-and rough effort. See `PROJECT_STATUS.md` for the full assessment.
+and rough effort. See `PROJECT_STATUS.md` for the current assessment.
+
+> **Status (2026-06-18):** All P0 blockers are **DONE** — the driver connects,
+> executes, and returns result sets through a real ODBC Driver Manager, verified
+> on Windows from .NET and on Linux under sanitizers. P1.1 and P1.2 are also
+> done. Remaining work (P1.3–P1.5, P2, P3) is hardening, test coverage, and
+> tooling. A Windows setup GUI (`ConfigDSN`) and DSN resolution were added on top
+> of the original plan (see "Post-plan work" at the end).
 
 ---
 
-## P0 — Blockers (driver is non-functional / non-compliant without these)
+## P0 — Blockers (driver is non-functional / non-compliant without these) — ALL DONE
 
-### P0.1 — Fix the ODBC return-code ABI
-- **Problem:** `include/trino_odbc.h:16-22` defines a custom ABI where
-  `SQL_ERROR == SQL_NO_DATA == 100` and `SQL_ERROR` is positive. Real ODBC
-  requires `SQL_SUCCESS=0`, `SQL_SUCCESS_WITH_INFO=1`, `SQL_NO_DATA=100`,
-  `SQL_ERROR=-1`, `SQL_INVALID_HANDLE=-2`, `SQL_NEED_DATA=99`. No real Driver
-  Manager will work with the current values.
-- **Fix:** Preferably include the system `<sql.h>`/`<sqlext.h>`/`<sqltypes.h>`
-  from unixODBC and delete the hand-rolled typedefs/macros. At minimum, correct
-  every value to match the spec. System headers also give correct `SQLCHAR`,
-  `SQLWCHAR`, `SQL_C_*`, and documented signatures.
-- **Files:** `include/trino_odbc.h` (+ ripple across all `.c` files).
-- **Effort:** Medium–High (mechanical but wide). **Do this first.**
+### P0.1 — Fix the ODBC return-code ABI — DONE
+- **Resolved:** the driver now uses the system `<sql.h>`/`<sqlext.h>`/
+  `<sqltypes.h>` headers (via `include/trino_odbc.h`); the hand-rolled,
+  colliding return-code macros are gone. Return codes match the spec, so a real
+  DM interprets them correctly.
+- **Resolved:** system ODBC headers are used; spec-correct return codes,
+  `SQLCHAR`/`SQLWCHAR`/`SQL_C_*` types, and documented signatures throughout.
+- **Files:** `include/trino_odbc.h` and all `.c` files.
 
-### P0.2 — Implement column + row parsing in the live query path
-- **Problem:** `src/protocol/client.c:366-369` leaves column/row parsing as TODOs,
-  so every query returns 0 columns / 0 rows; `SQLFetch` always returns `SQL_NO_DATA`.
-- **Fix:** Replace the hand-rolled `strstr` JSON scanner in `client.c` with
-  `json-c` (already a dependency, already used in `response.c`). Parse the full
-  `QueryResults` object: `id`, `nextUri`, `columns[]`, `data[][]`, `stats`,
-  `error`. Populate `results->columns`, `results->rows` (`SQLCHAR***`),
-  `results->row_count`, `results->column_count`. Reuse/extend
-  `trino_parse_columns_jsonc`.
+### P0.2 — Implement column + row parsing in the live query path — DONE
+- **Resolved:** `src/protocol/response.c` parses the full `QueryResults` object
+  with json-c (`id`, `nextUri`, `columns[]`, `data[][]`, `stats`, `error`) and
+  populates the result set. `SQLFetch`/`SQLGetData` return real rows.
 - **Files:** `src/protocol/client.c`, `src/protocol/response.c`.
-- **Effort:** High. This is the core of the driver.
 
-### P0.3 — Implement pagination (fetch_next) with proper row accumulation
-- **Problem:** `src/protocol/client.c:399,470` — `fetch_next` doesn't parse new
-  rows and leaks the previous page. Trino streams results across many `nextUri`
-  pages, so single-page-only is unusable.
-- **Fix:** In `fetch_next`, free the prior page's rows, parse the new `data[][]`,
-  append/replace rows, update `nextUri`/`state`. Wire `SQLFetch`
-  (`src/resultset/resultset.c:62-69`) to call `trino_http_client_fetch_next` when
-  local rows are exhausted and `next_uri != NULL` instead of returning `SQL_NO_DATA`.
+### P0.3 — Implement pagination (fetch_next) with proper row accumulation — DONE
+- **Resolved:** `trino_http_client_query` follows the `nextUri` chain until
+  columns and a data page are available; `fetch_next` parses subsequent pages and
+  frees the prior page. Verified against real Trino result sets.
 - **Files:** `src/protocol/client.c`, `src/resultset/resultset.c`.
-- **Effort:** Medium–High.
 
-### P0.4 — Actually substitute bound parameters before executing
-- **Problem:** `substitute_parameters()` (`src/statement/prepared.c:158`) is never
-  called; raw SQL with `?` placeholders is sent. `format_parameter_value` is always
-  called with `SQL_C_CHAR` (`src/statement/prepared.c:181`), so all params are
-  emitted as quoted strings regardless of bound type.
-- **Fix:** Call `substitute_parameters` in `trino_stmt_exec_direct` before sending;
-  pass the record's real `c_type` to `format_parameter_value`; handle NULL via
-  `str_len_or_ind == SQL_NULL_DATA`. Ideally migrate to Trino server-side prepared
-  statements (`X-Trino-Prepared-Statement` / `EXECUTE`) to avoid SQL injection.
+### P0.4 — Actually substitute bound parameters before executing — DONE
+- **Resolved:** bound parameters are substituted before sending, using each
+  record's bound C type, with NULL handling. Verified via the bound-parameter
+  e2e/live tests.
 - **Files:** `src/statement/statement.c`, `src/statement/prepared.c`.
-- **Effort:** Medium (substitution) / High (server-side prepare).
 
 ---
 
-### P0.5 — Implement SQLConnect / SQLDriverConnect / SQLDisconnect
-- **Problem:** The driver implements no connection entry points — there is no
-  `SQLConnect`, `SQLDriverConnect`, or `SQLDisconnect` exported. A real ODBC
-  Driver Manager (unixODBC/iODBC) connects exclusively through these, so the
-  driver cannot be opened by any DM-based application despite the connection
-  parsing/lifecycle logic existing internally (`trino_conn_connect`,
-  `trino_parse_conn_string`). (Discovered while building the end-to-end tests,
-  which had to call `trino_conn_connect` directly.)
-- **Fix:** Add the standard entry points:
-  - `SQLConnect(dbc, dsn, ..., user, ..., auth, ...)` — look up the DSN (via the
-    DM/odbc.ini) or treat it as a server, build a `trino_conn_config_t`, call
-    `trino_conn_connect`.
-  - `SQLDriverConnect(dbc, hwnd, inConnStr, ..., outConnStr, ..., completion)` —
-    parse the full connection string with `trino_parse_conn_string`, connect,
-    and write back the completed connection string.
-  - `SQLDisconnect(dbc)` — wrap `trino_conn_disconnect`.
-  - Wire these into `SQLGetFunctions` (already advertises `SQLConnect`/
-    `SQLDisconnect`/`SQLDriverConnect`).
-- **Files:** new `src/connection/connect.c` (or extend `connection.c`),
-  `src/connection/info.c` (SQLGetFunctions already lists them).
-- **Effort:** Medium. Required for any real DM usage.
+### P0.5 — Implement SQLConnect / SQLDriverConnect / SQLDisconnect — DONE
+- **Resolved:** `SQLConnect`, `SQLDriverConnect`(+`W`), and `SQLDisconnect` are
+  implemented in `src/connection/connect.c` and exported. `SQLConnect` resolves a
+  real DSN's keywords from `ODBC.INI` (falling back to host[:port]);
+  `SQLDriverConnect` resolves `DSN=` then overlays the connection string. These
+  are advertised in `SQLGetFunctions`.
+- **Files:** `src/connection/connect.c`, `src/connection/connection.c`,
+  `src/connection/info.c`.
 
 ## P1 — Correctness & safety (needed before trusting in production)
 
@@ -168,13 +141,12 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
 - **Fix MinGW shared/static mismatch:** toolchain sets `BUILD_SHARED_LIBS OFF` but
   `src/CMakeLists.txt` hardcodes `add_library(... SHARED ...)`. Respect
   `BUILD_SHARED_LIBS`.
-- **Remove stray artifacts:** `include/trino_odbc/resultset.h.orig`, duplicate
-  `build_windows.md`/`BUILD_WINDOWS.md`, duplicate `windows/odbc.ini`/`odbcinst.ini`,
-  orphaned integration stubs. De-hardcode `/root/...` paths in
-  `create_windows_package.sh`.
-- **README accuracy:** Remove or implement "connection pooling" and "Kerberos auth";
-  drop "production-quality" until P0/P1 are done. Add a known-limitations section
-  that matches reality.
+- **Remove stray artifacts:** `include/trino_odbc/resultset.h.orig`, orphaned
+  integration stubs. (The hand-rolled `create_windows_package.sh` and the
+  `trino-odbc-windows-x64/` package dir were removed — the MSI replaces them.)
+- **README accuracy — DONE:** README/PROJECT_STATUS/BUILD_WINDOWS/installer docs
+  were updated to reflect the working state (DM interop, setup GUI, MSI), correct
+  connection keywords, and a realistic known-limitations section.
 
 ---
 
@@ -187,5 +159,50 @@ and rough effort. See `PROJECT_STATUS.md` for the full assessment.
 5. **P1.2–P1.5** (correctness/safety hardening under sanitizers).
 6. **P3** (CI/tooling/hygiene) — stand up CI early (alongside step 3).
 
-**Realistic effort to reach a genuine 1.0:** several focused weeks, with
-P0.1–P0.3 being the bulk of the work and the highest risk.
+P0.1–P0.5, P1.1, and P1.2 are complete; the remaining backlog is P1.3–P1.5, P2,
+and P3.
+
+---
+
+## Post-plan work (added after the original assessment)
+
+Work done to make the driver function with the **Windows** ODBC Driver Manager
+and .NET, beyond the original Linux-focused plan:
+
+- **Windows DM interop fixes** (found via WinDbg and DM tracing):
+  - Implemented the `SQL_API_ODBC3_ALL_FUNCTIONS` bitmap in `SQLGetFunctions` so
+    the DM knows which functions exist (otherwise statement allocation failed).
+  - Return the four automatically-allocated descriptor handles (APD/IPD/ARD/IRD)
+    from `SQLGetStmtAttr`. Previously the DM stored uninitialized handles and
+    crashed in `odbc32!SetStmtAttr` (access violation) — the root cause of the
+    "crash on any query" behavior.
+  - Implemented `SQLDescribeCol`/`SQLDescribeColW` (the DM calls the W form
+    during result processing) and advertised them.
+  - Handle `SQL_DESC_CONCISE_TYPE` in `SQLColAttribute` (.NET queries it to map
+    columns to CLR types; returning 0 produced "Unknown SQL type - 0").
+  - Advertise `SQLFreeStmt` in the function bitmap.
+  - Export and provide consistent ANSI + Unicode (W) entry points with the
+    correct calling convention; controlled exports via `src/trino_odbc.def`.
+
+- **Windows setup GUI** (`src/setup/`):
+  - `ConfigDSN`/`ConfigDSNW` with a native Win32 dialog (core + advanced fields)
+    and a **Test Connection** button. The driver DLL doubles as the setup DLL.
+  - The Test Connection path loads `odbc32.dll` and resolves ODBC entry points
+    via `GetProcAddress` so it goes through the real driver manager rather than
+    binding to the driver's own exports.
+  - Build: enable the CMake `RC` language on Windows; link
+    `legacy_stdio_definitions` (needed by `odbccp32` under the static CRT).
+
+- **DSN resolution:** `trino_apply_dsn` (reads a DSN's keywords from `ODBC.INI`),
+  `trino_merge_conn_string` (layer keywords without resetting defaults), and
+  `trino_conn_str_get_dsn`. `SQLConnect`/`SQLDriverConnect` now apply
+  defaults → DSN keywords → connection-string keywords.
+
+- **Packaging/registry consistency:** the MSI (`installer/`) ships a single
+  self-contained DLL and sets both `Driver` and `Setup` to it;
+  `windows/install.reg` and `windows/odbcinst.ini` were reconciled
+  (`DriverODBCVer=03.80`, `Setup` pointing at the driver DLL).
+
+**Realistic effort to reach a genuine 1.0:** the core data path and Windows DM
+interop are done; remaining effort is the hardening/test/tooling backlog
+(P1.3–P1.5, P2, P3).

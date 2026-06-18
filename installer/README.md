@@ -6,6 +6,10 @@ self-contained driver DLL into `C:\Program Files\TrinoODBC\bin` and registers it
 with the Windows ODBC subsystem (so it appears in the **ODBC Data Source
 Administrator**, `odbcad32.exe`).
 
+The same DLL contains the **setup GUI** (the `ConfigDSN` dialog). The MSI sets
+the driver's `Setup` registry value to the driver DLL, so clicking **Add** or
+**Configure** in the ODBC Administrator opens the Trino DSN dialog.
+
 curl and json-c are **statically linked** into `trino_odbc.dll` (via the vcpkg
 `x64-windows-static` triplet), and the **MSVC C runtime is also statically
 linked** (`TRINO_ODBC_STATIC_CRT=ON`). The result is a fully self-contained
@@ -72,16 +76,23 @@ wix build installer/trino_odbc.wxs -arch x64 `
 
 ## How driver registration works
 
-The `.wxs` uses WiX's `<ODBCDriver>` element rather than writing registry keys
-directly. WiX calls the ODBC installer API (`SQLInstallDriverEx`), which is the
-supported, uninstall-safe way to register an ODBC driver and correctly handles
-the 64-bit vs. 32-bit (WoW64) registry views. This replaces the manual
-`windows/install.reg` approach for end users.
+The `.wxs` registers the driver with explicit `<RegistryValue>` entries in the
+64-bit `HKLM\SOFTWARE\ODBC\ODBCINST.INI` view, rather than WiX's `<ODBCDriver>`
+element. `<ODBCDriver>` writes the `Driver`/`Setup` values in WiX's
+`[!shortname]|[longname]` file-path format, which the ODBC Driver Manager does
+not accept for these values — it then fails to load the driver with the opaque
+"system error code 126". Writing the plain full path to `trino_odbc.dll` avoids
+the problem. The MSI's registry keys mirror `windows/install.reg`.
+
+Both `Driver` and `Setup` point at `trino_odbc.dll` (the driver DLL also
+provides the `ConfigDSN` setup dialog).
 
 Driver attributes registered:
 
 | Attribute | Value |
 |-----------|-------|
+| `Driver` | `[#trino_odbc.dll]` (full install path) |
+| `Setup` | `[#trino_odbc.dll]` (same DLL — provides the setup GUI) |
 | `APILevel` | 1 |
 | `ConnectFunctions` | YYN |
 | `DriverODBCVer` | 03.80 |
@@ -135,6 +146,12 @@ After installing the MSI on a Windows machine:
 
 1. Open **ODBC Data Source Administrator (64-bit)** → **Drivers** tab → confirm
    "Trino ODBC Driver" is listed.
-2. **System DSN** → **Add** → select the driver → configure a connection string
-   (e.g. `Server=...;Port=8080;Catalog=tpch;Schema=tiny`).
-3. Connect from any ODBC client (Excel, Power BI, `pyodbc`, etc.).
+2. **System DSN** → **Add** → select the driver. The Trino setup dialog opens;
+   fill in Server/Port/Catalog/Schema/User/Auth/SSL, click **Test Connection**,
+   then **OK** to save the DSN.
+3. Connect from any ODBC client (Excel, Power BI, `pyodbc`, .NET
+   `System.Data.Odbc`, etc.) using `DSN=YourDsnName`, or DSN-less with a full
+   `Driver={Trino ODBC Driver};...` connection string.
+
+> Tip: set the `TRINO_ODBC_LOG` environment variable to a writable file path to
+> capture a driver call trace for troubleshooting.
