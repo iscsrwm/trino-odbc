@@ -312,7 +312,6 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
     }
 
     ret = pAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
-    trino_log("Test Connection: DM SQLAllocHandle(ENV) ret=%d", (int)ret);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         FreeLibrary(dm);
         MessageBoxA(hdlg, "Failed to allocate ODBC environment.", "Test Connection",
@@ -322,7 +321,6 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
     pSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
 
     ret = pAllocHandle(SQL_HANDLE_DBC, env, &dbc);
-    trino_log("Test Connection: DM SQLAllocHandle(DBC) ret=%d", (int)ret);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         pFreeHandle(SQL_HANDLE_ENV, env);
         FreeLibrary(dm);
