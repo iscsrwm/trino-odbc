@@ -89,9 +89,15 @@ endif()
 # Link dependencies
 target_link_libraries(trino_odbc PRIVATE CURL::libcurl Threads::Threads ${JSON_C_TARGET})
 
-# On Windows, an ODBC driver links the ODBC import libraries.
+# On Windows, an ODBC driver links the ODBC import libraries. odbccp32 (the ODBC
+# installer library, used by the setup GUI) internally calls StringCchPrintfW,
+# which references the legacy stdio symbol _vsnwprintf_s. With the static CRT
+# (/MT) that symbol lives in legacy_stdio_definitions.lib, so link it to resolve
+# "unresolved external symbol _vsnwprintf_s".
+# user32/comdlg32 provide the dialog APIs used by the setup GUI.
 if(WIN32)
-    target_link_libraries(trino_odbc PRIVATE odbc32 odbccp32)
+    target_link_libraries(trino_odbc PRIVATE
+        odbc32 odbccp32 legacy_stdio_definitions user32 comdlg32)
 endif()
 
 # Set library properties
