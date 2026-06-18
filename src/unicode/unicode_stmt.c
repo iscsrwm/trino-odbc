@@ -109,6 +109,41 @@ SQLRETURN SQL_API SQLGetStmtAttrW(SQLHSTMT stmt, SQLINTEGER attr, SQLPOINTER val
  * Column metadata
  * ======================================================================== */
 
+SQLRETURN SQL_API SQLDescribeColW(SQLHSTMT stmt, SQLUSMALLINT col, SQLWCHAR *col_name,
+                                  SQLSMALLINT buffer_length, SQLSMALLINT *name_length,
+                                  SQLSMALLINT *data_type, SQLULEN *column_size,
+                                  SQLSMALLINT *decimal_digits, SQLSMALLINT *nullable)
+{
+    /* Get the ANSI column name and numeric metadata, then widen the name.
+     * Per the ODBC W convention, col_name buffer_length and the returned
+     * name_length are expressed in CHARACTERS for SQLDescribeColW. */
+    char ansi_name[1024] = {0};
+    SQLSMALLINT ansi_name_len = 0;
+    SQLRETURN ret = SQLDescribeCol(stmt, col, (SQLCHAR *)ansi_name,
+                                   (SQLSMALLINT)sizeof(ansi_name), &ansi_name_len,
+                                   data_type, column_size, decimal_digits, nullable);
+    if (ret == SQL_ERROR || ret == SQL_INVALID_HANDLE)
+        return ret;
+
+    size_t wlen = 0;
+    SQLWCHAR *w = trino_utf8_to_wchars(ansi_name, &wlen);
+    if (col_name && buffer_length > 0) {
+        size_t max_wchars = (size_t)buffer_length;
+        size_t copy = wlen;
+        if (copy > max_wchars - 1)
+            copy = max_wchars - 1;
+        if (w && copy > 0)
+            memcpy(col_name, w, copy * sizeof(SQLWCHAR));
+        col_name[copy] = 0;
+        if (wlen > copy)
+            ret = SQL_SUCCESS_WITH_INFO;
+    }
+    if (name_length)
+        *name_length = (SQLSMALLINT)wlen;
+    free(w);
+    return ret;
+}
+
 SQLRETURN SQL_API SQLColAttributeW(SQLHSTMT stmt, SQLUSMALLINT col, SQLUSMALLINT field,
                            SQLPOINTER char_attr, SQLSMALLINT buffer_length,
                            SQLSMALLINT *string_length, SQLLEN *numeric_attr)

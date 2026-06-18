@@ -576,6 +576,58 @@ SQLRETURN trino_stmt_col_attribute(trino_stmt_t *stmt, SQLUSMALLINT col, SQLINTE
 }
 
 /* ========================================================================
+ * SQLDescribeCol - describe a result set column
+ * ======================================================================== */
+
+SQLRETURN SQLDescribeCol(SQLHSTMT statement_handle, SQLUSMALLINT column_number,
+                         SQLCHAR *column_name, SQLSMALLINT buffer_length,
+                         SQLSMALLINT *name_length, SQLSMALLINT *data_type,
+                         SQLULEN *column_size, SQLSMALLINT *decimal_digits,
+                         SQLSMALLINT *nullable)
+{
+    trino_log("SQLDescribeCol: col=%u stmt=%p", (unsigned)column_number,
+              (void *)statement_handle);
+    if (!statement_handle)
+        return SQL_INVALID_HANDLE;
+
+    trino_stmt_t *stmt = (trino_stmt_t *)statement_handle;
+    if (!trino_stmt_valid(stmt))
+        return SQL_INVALID_HANDLE;
+
+    pthread_mutex_lock(&stmt->mutex);
+
+    if (!stmt->ird || column_number == 0 || column_number > stmt->ird->record_count) {
+        pthread_mutex_unlock(&stmt->mutex);
+        trino_diag_set_error(&stmt->diagnostics, "07009", 0, "Invalid column number");
+        return SQL_ERROR;
+    }
+
+    trino_desc_record_t *rec = &stmt->ird->records[column_number - 1];
+
+    /* Column name (and its length, in characters). */
+    size_t full_len = strlen((char *)rec->column_name);
+    if (column_name && buffer_length > 0) {
+        strncpy((char *)column_name, (char *)rec->column_name,
+                (size_t)buffer_length - 1);
+        column_name[buffer_length - 1] = '\0';
+    }
+    if (name_length)
+        *name_length = (SQLSMALLINT)full_len;
+
+    if (data_type)
+        *data_type = rec->sql_type;
+    if (column_size)
+        *column_size = rec->column_size;
+    if (decimal_digits)
+        *decimal_digits = rec->decimal_digits;
+    if (nullable)
+        *nullable = rec->nullable;
+
+    pthread_mutex_unlock(&stmt->mutex);
+    return SQL_SUCCESS;
+}
+
+/* ========================================================================
  * Statement attributes
  * ======================================================================== */
 
