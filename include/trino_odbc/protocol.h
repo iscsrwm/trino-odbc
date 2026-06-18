@@ -90,6 +90,8 @@ typedef struct trino_http_client_s {
     bool ssl_verify;    /* verify peer/host cert (default true) */
     bool ssl_no_revoke; /* skip cert revocation check (default false) */
     char *ssl_truststore;
+    char *catalog; /* default catalog -> X-Trino-Catalog */
+    char *schema;  /* default schema  -> X-Trino-Schema  */
     char *client_tags_json;
     char *session_properties_json;
     char *source;
@@ -161,6 +163,7 @@ SQLRETURN trino_http_client_configure(trino_http_client_t *client, const char *s
                                       SQLINTEGER port, const char *user,
                                       const char *password, const char *auth_type,
                                       bool ssl, const char *ssl_truststore,
+                                      const char *catalog, const char *schema,
                                       const char *client_tags_json,
                                       const char *session_properties_json,
                                       const char *source);

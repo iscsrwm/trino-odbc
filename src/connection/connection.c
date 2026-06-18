@@ -414,6 +414,19 @@ SQLRETURN trino_conn_connect(trino_conn_t *conn, const trino_conn_config_t *conf
                                ? strdup((char *)config->ssl_truststore)
                                : NULL;
 
+    /* Client tags and session properties are passed through to the HTTP client
+     * as the X-Trino-Client-Tags / X-Trino-Session headers. Previously these
+     * were parsed into the config but never copied here, so they were silently
+     * dropped. */
+    free(conn->client_tags_json);
+    conn->client_tags_json = strlen((char *)config->client_tags) > 0
+                                 ? strdup((char *)config->client_tags)
+                                 : NULL;
+    free(conn->session_properties_json);
+    conn->session_properties_json = strlen((char *)config->session_properties) > 0
+                                        ? strdup((char *)config->session_properties)
+                                        : NULL;
+
     conn->connected = true;
 
     pthread_mutex_unlock(&conn->mutex);
@@ -599,8 +612,8 @@ trino_http_client_t *trino_conn_get_http_client(trino_conn_t *conn)
 
     SQLRETURN ret = trino_http_client_configure(
         client, conn->server, conn->port, conn->user, conn->password, conn->auth_type,
-        conn->ssl_enabled, conn->ssl_truststore, conn->client_tags_json,
-        conn->session_properties_json, conn->source);
+        conn->ssl_enabled, conn->ssl_truststore, conn->catalog, conn->schema,
+        conn->client_tags_json, conn->session_properties_json, conn->source);
 
     if (ret != SQL_SUCCESS) {
         trino_http_client_destroy(client);

@@ -60,6 +60,8 @@ void trino_http_client_destroy(trino_http_client_t *client)
     free(client->password);
     free(client->auth_type);
     free(client->ssl_truststore);
+    free(client->catalog);
+    free(client->schema);
     free(client->client_tags_json);
     free(client->session_properties_json);
     free(client->source);
@@ -69,7 +71,8 @@ void trino_http_client_destroy(trino_http_client_t *client)
 SQLRETURN trino_http_client_configure(
     trino_http_client_t *client, const char *server, SQLINTEGER port, const char *user,
     const char *password, const char *auth_type, bool ssl, const char *ssl_truststore,
-    const char *client_tags_json, const char *session_properties_json, const char *source)
+    const char *catalog, const char *schema, const char *client_tags_json,
+    const char *session_properties_json, const char *source)
 {
     if (!client || !server)
         return SQL_ERROR;
@@ -95,6 +98,12 @@ SQLRETURN trino_http_client_configure(
 
     free(client->ssl_truststore);
     client->ssl_truststore = ssl_truststore ? strdup(ssl_truststore) : NULL;
+
+    free(client->catalog);
+    client->catalog = (catalog && *catalog) ? strdup(catalog) : NULL;
+
+    free(client->schema);
+    client->schema = (schema && *schema) ? strdup(schema) : NULL;
 
     free(client->client_tags_json);
     client->client_tags_json = client_tags_json ? strdup(client_tags_json) : NULL;
@@ -218,6 +227,39 @@ static struct curl_slist *append_safe_header(struct curl_slist *headers, const c
     buf[pos] = '\0';
 
     return curl_slist_append(headers, buf);
+}
+
+/* Build the standard Trino protocol headers for a request. X-Trino-User is
+ * mandatory on every request; the rest are sent when configured. All
+ * user-controlled values are sanitized against CRLF injection. The returned
+ * list must be freed (perform_request consumes it). */
+static struct curl_slist *build_trino_headers(trino_http_client_t *client, bool is_post)
+{
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    if (is_post)
+        headers = curl_slist_append(headers, "Content-Type: text/plain");
+
+    /* Trino REQUIRES X-Trino-User on every request. Use the configured user, or
+     * fall back to a non-empty default so unauthenticated (NONE) connections to
+     * a default-configured Trino still present an identity. */
+    {
+        const char *trino_user =
+            (client->user && *client->user) ? client->user : "trino_odbc";
+        headers = append_safe_header(headers, "X-Trino-User", trino_user);
+    }
+
+    /* Session catalog/schema so unqualified names resolve against the defaults. */
+    headers = append_safe_header(headers, "X-Trino-Catalog", client->catalog);
+    headers = append_safe_header(headers, "X-Trino-Schema", client->schema);
+
+    headers = append_safe_header(headers, "X-Trino-Source", (const char *)client->source);
+    headers = append_safe_header(headers, "X-Trino-Client-Tags",
+                                 (const char *)client->client_tags_json);
+    /* Session properties: comma-separated key=value list, per Trino protocol. */
+    headers = append_safe_header(headers, "X-Trino-Session",
+                                 (const char *)client->session_properties_json);
+    return headers;
 }
 
 void trino_http_set_test_transport(trino_http_transport_fn fn, void *user_ctx)
@@ -374,14 +416,8 @@ trino_query_results_t *trino_http_client_query(trino_http_client_t *client,
         }
     }
 
-    /* Build request headers. User-controlled values (source, client tags) are
-     * sanitized to prevent CRLF header injection. */
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Accept: application/json");
-    headers = curl_slist_append(headers, "Content-Type: text/plain");
-    headers = append_safe_header(headers, "X-Trino-Client-Tags",
-                                 (const char *)client->client_tags_json);
-    headers = append_safe_header(headers, "X-Trino-Source", (const char *)client->source);
+    /* Build request headers (X-Trino-User + catalog/schema/source/tags/session). */
+    struct curl_slist *headers = build_trino_headers(client, /*is_post=*/true);
 
     char *response = perform_request(client, "POST", url, (const char *)sql, headers);
     if (!response) {
@@ -464,8 +500,10 @@ SQLRETURN trino_http_client_fetch_next(trino_http_client_t *client,
                          client->ssl_truststore);
     }
 
+    /* nextUri GET requests must also carry X-Trino-User and the session headers. */
+    struct curl_slist *headers = build_trino_headers(client, /*is_post=*/false);
     char *response =
-        perform_request(client, "GET", (const char *)results->next_uri, NULL, NULL);
+        perform_request(client, "GET", (const char *)results->next_uri, NULL, headers);
     if (!response) {
         return SQL_ERROR;
     }
