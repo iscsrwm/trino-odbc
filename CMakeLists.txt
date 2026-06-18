@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
-project(trino_odbc_driver VERSION 1.0.0 LANGUAGES C)
+# Enable the RC (resource compiler) language on Windows so the setup dialog
+# resource (src/setup/setup.rc) is compiled into the driver DLL. RC is only
+# meaningful on Windows; listing it is harmless elsewhere as it's auto-skipped.
+if(WIN32)
+    project(trino_odbc_driver VERSION 1.0.0 LANGUAGES C RC)
+else()
+    project(trino_odbc_driver VERSION 1.0.0 LANGUAGES C)
+endif()
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)

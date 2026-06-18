@@ -55,6 +55,17 @@ set(UNICODE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/unicode/unicode_stmt.c
 )
 
+# Windows-only setup GUI (ConfigDSN dialog shown by the ODBC Administrator).
+# The .c is guarded by #ifdef _WIN32 and the .rc is only compiled on Windows.
+if(WIN32)
+    set(SETUP_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/setup/setup.c
+        ${CMAKE_SOURCE_DIR}/src/setup/setup.rc
+    )
+else()
+    set(SETUP_SOURCES)
+endif()
+
 # Add the shared library
 add_library(trino_odbc SHARED
     ${CORE_SOURCES}
@@ -67,7 +78,13 @@ add_library(trino_odbc SHARED
     ${CATALOG_SOURCES}
     ${TRANSACTION_SOURCES}
     ${UNICODE_SOURCES}
+    ${SETUP_SOURCES}
 )
+
+# The setup dialog resource needs to find resource.h via an include dir.
+if(WIN32)
+    target_include_directories(trino_odbc PRIVATE ${CMAKE_SOURCE_DIR}/src/setup)
+endif()
 
 # Link dependencies
 target_link_libraries(trino_odbc PRIVATE CURL::libcurl Threads::Threads ${JSON_C_TARGET})

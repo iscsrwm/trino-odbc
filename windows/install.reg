@@ -6,9 +6,10 @@ Windows Registry Editor Version 5.00
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\ODBC\ODBCINST.INI\Trino ODBC Driver]
 "Driver"="C:\Program Files\TrinoODBC\bin\trino_odbc.dll"
+"Setup"="C:\Program Files\TrinoODBC\bin\trino_odbc.dll"
 "APILevel"=dword:00000001
 "ConnectFunctions"="YYN"
-"DriverODBCVer"="03.51"
+"DriverODBCVer"="03.80"
 "SQLLevel"=dword:00000001
 
 ; Install Trino ODBC Driver - 32-bit (WoW64)
@@ -17,7 +18,8 @@ Windows Registry Editor Version 5.00
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\ODBC\ODBCINST.INI\Trino ODBC Driver]
 "Driver"="C:\Program Files (x86)\TrinoODBC\bin\trino_odbc.dll"
+"Setup"="C:\Program Files (x86)\TrinoODBC\bin\trino_odbc.dll"
 "APILevel"=dword:00000001
 "ConnectFunctions"="YYN"
-"DriverODBCVer"="03.51"
+"DriverODBCVer"="03.80"
 "SQLLevel"=dword:00000001

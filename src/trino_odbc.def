@@ -96,3 +96,7 @@ EXPORTS
     ; Data source functions
     SQLDataSources
     SQLDrivers
+
+    ; Setup GUI (ODBC Administrator ConfigDSN entry points)
+    ConfigDSN
+    ConfigDSNW

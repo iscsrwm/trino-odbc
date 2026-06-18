@@ -13,6 +13,9 @@
 #include <stdio.h>
 #include <errno.h>
 #include <limits.h>
+#ifdef _WIN32
+#include <odbcinst.h>
+#endif
 
 /* Convert an ODBC wide-string argument (SQLWCHAR*, possibly SQL_NTS or
  * length-delimited in characters) into a freshly allocated UTF-8 C string.
@@ -81,22 +84,34 @@ SQLRETURN SQLConnect(SQLHDBC connection_handle, SQLCHAR *server_name,
     trino_conn_config_t config;
     trino_conn_config_defaults(&config);
 
-    /* The "server name" is treated as a host (or host:port). A full DSN lookup
-     * against odbc.ini would be performed by the driver manager; if a bare DSN
-     * name is passed we fall back to using it as the host. */
+    /* In SQLConnect, the first argument is the DSN name. Load the DSN's stored
+     * keywords (set by the setup GUI). If no such DSN exists, fall back to
+     * treating the value as a host[:port] for convenience. */
     if (server && *server) {
-        char *colon = strrchr(server, ':');
-        if (colon) {
-            *colon = '\0';
-            errno = 0;
-            char *end = NULL;
-            long p = strtol(colon + 1, &end, 10);
-            if (end != colon + 1 && errno == 0 && p > 0 && p <= 65535) {
-                config.port = (SQLINTEGER)p;
+        char probe[256] = {0};
+#ifdef _WIN32
+        /* If the DSN has a Server keyword, it is a real DSN. */
+        SQLGetPrivateProfileString(server, "Server", "", probe, sizeof(probe),
+                                   "ODBC.INI");
+#endif
+        if (probe[0]) {
+            trino_log("SQLConnect: resolving DSN=%s", server);
+            trino_apply_dsn(server, &config);
+        } else {
+            /* Treat as host or host:port. */
+            char *colon = strrchr(server, ':');
+            if (colon) {
+                *colon = '\0';
+                errno = 0;
+                char *end = NULL;
+                long p = strtol(colon + 1, &end, 10);
+                if (end != colon + 1 && errno == 0 && p > 0 && p <= 65535) {
+                    config.port = (SQLINTEGER)p;
+                }
             }
+            strncpy((char *)config.server, server, sizeof(config.server) - 1);
+            config.server[sizeof(config.server) - 1] = '\0';
         }
-        strncpy((char *)config.server, server, sizeof(config.server) - 1);
-        config.server[sizeof(config.server) - 1] = '\0';
     }
     if (user && *user) {
         strncpy((char *)config.user, user, sizeof(config.user) - 1);
@@ -170,8 +185,27 @@ SQLRETURN SQLDriverConnect(SQLHDBC connection_handle, SQLHWND window_handle,
         }
     }
 
+    /* Resolve configuration in precedence order: built-in defaults, then any
+     * stored DSN keywords, then the explicit connection-string keywords (which
+     * win). This lets a DSN created by the setup GUI be used via DSN=Name while
+     * still allowing inline overrides. */
     trino_conn_config_t config;
-    SQLRETURN ret = trino_parse_conn_string((const SQLCHAR *)conn_str, &config);
+    trino_conn_config_defaults(&config);
+
+    char dsn_name[256];
+    if (trino_conn_str_get_dsn((const SQLCHAR *)conn_str, dsn_name, sizeof(dsn_name)) &&
+        dsn_name[0]) {
+        trino_log("SQLDriverConnect: resolving DSN=%s", dsn_name);
+        trino_apply_dsn(dsn_name, &config);
+    }
+
+    /* Overlay the connection-string keywords on top of the DSN/defaults.
+     * trino_parse_conn_string resets to defaults internally, so parse into a
+     * temporary and copy only the keywords that were explicitly provided would
+     * be complex; instead parse the string into a separate config and merge by
+     * preferring non-empty/explicit values. To keep precedence simple and
+     * correct, we re-apply the connection string over the merged config here. */
+    SQLRETURN ret = trino_merge_conn_string((const SQLCHAR *)conn_str, &config);
     if (ret != SQL_SUCCESS) {
         free(conn_str);
         trino_diag_set_error(&conn->diagnostics, TRINO_SQLSTATE_INVALID_CONN, 0,

@@ -27,11 +27,23 @@ typedef struct {
     SQLUINTEGER connect_timeout;
 } trino_conn_config_t;
 
-/* Parse a connection string (key=value;key=value format) */
+/* Parse a connection string (key=value;key=value format) into a fresh config
+ * (resets to defaults first). */
 SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *config);
+
+/* Apply connection-string keywords on top of an existing config without
+ * resetting to defaults (used to layer a connection string over DSN values). */
+SQLRETURN trino_merge_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *config);
 
 /* Initialize default config */
 void trino_conn_config_defaults(trino_conn_config_t *config);
+
+/* Apply the keyword values stored for a DSN (in ODBC.INI) to the config.
+ * No-op on non-Windows. Only fields with a stored value are overwritten. */
+void trino_apply_dsn(const char *dsn, trino_conn_config_t *config);
+
+/* Extract the DSN= value from a connection string. Returns true if found. */
+bool trino_conn_str_get_dsn(const SQLCHAR *conn_str, char *out, size_t out_len);
 
 /* ========================================================================
  * Connection lifecycle

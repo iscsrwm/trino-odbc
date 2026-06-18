@@ -44,14 +44,15 @@ void trino_conn_config_defaults(trino_conn_config_t *config)
     config->connect_timeout = 30;
 }
 
-/* Parse key=value;key=value connection string */
-SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *config)
+/* Apply key=value;key=value connection-string keywords ON TOP of an existing
+ * config (does NOT reset to defaults first). Keywords present in the string
+ * overwrite the corresponding config fields; absent keywords are left as-is.
+ * This is used to layer a connection string over DSN/defaults. */
+SQLRETURN trino_merge_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *config)
 {
     if (!conn_str || !config) {
         return SQL_ERROR;
     }
-
-    trino_conn_config_defaults(config);
 
     char *str = strdup((const char *)conn_str);
     if (!str)
@@ -132,6 +133,170 @@ SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *
 
     free(str);
     return SQL_SUCCESS;
+}
+
+/* Parse a connection string into a fresh config (defaults first, then the
+ * string keywords). Retained for callers that want stand-alone parsing. */
+SQLRETURN trino_parse_conn_string(const SQLCHAR *conn_str, trino_conn_config_t *config)
+{
+    if (!conn_str || !config)
+        return SQL_ERROR;
+    trino_conn_config_defaults(config);
+    return trino_merge_conn_string(conn_str, config);
+}
+
+/* ========================================================================
+ * DSN resolution
+ *
+ * When connecting by DSN, the keyword values saved by the setup GUI live in the
+ * ODBC.INI section named after the DSN. Read them and apply on top of the
+ * current config so an explicit connection-string keyword always wins over the
+ * stored DSN value (the caller applies the connection string AFTER this).
+ * ======================================================================== */
+
+#ifdef _WIN32
+#include <odbcinst.h>
+
+static void dsn_get(const char *dsn, const char *key, char *out, int out_len)
+{
+    out[0] = '\0';
+    SQLGetPrivateProfileString(dsn, key, "", out, out_len, "ODBC.INI");
+}
+
+/* Populate config from the stored DSN entry. Only overwrites fields that have a
+ * stored value, so defaults / prior settings are preserved otherwise. */
+void trino_apply_dsn(const char *dsn, trino_conn_config_t *config)
+{
+    char v[1024];
+
+    if (!dsn || !*dsn || !config)
+        return;
+
+    dsn_get(dsn, "Server", v, sizeof(v));
+    if (!v[0])
+        dsn_get(dsn, "Host", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->server, v, sizeof(config->server) - 1),
+            config->server[sizeof(config->server) - 1] = '\0';
+
+    dsn_get(dsn, "Port", v, sizeof(v));
+    if (v[0])
+        config->port = (SQLINTEGER)parse_uint_value(v, config->port);
+
+    dsn_get(dsn, "User", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->user, v, sizeof(config->user) - 1),
+            config->user[sizeof(config->user) - 1] = '\0';
+
+    dsn_get(dsn, "Password", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->password, v, sizeof(config->password) - 1),
+            config->password[sizeof(config->password) - 1] = '\0';
+
+    dsn_get(dsn, "Catalog", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->catalog, v, sizeof(config->catalog) - 1),
+            config->catalog[sizeof(config->catalog) - 1] = '\0';
+
+    dsn_get(dsn, "Schema", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->schema, v, sizeof(config->schema) - 1),
+            config->schema[sizeof(config->schema) - 1] = '\0';
+
+    dsn_get(dsn, "Authentication", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->auth_type, v, sizeof(config->auth_type) - 1),
+            config->auth_type[sizeof(config->auth_type) - 1] = '\0';
+
+    dsn_get(dsn, "SSL", v, sizeof(v));
+    if (v[0])
+        config->ssl_enabled = (strcasecmp(v, "true") == 0 ||
+                               strcasecmp(v, "yes") == 0 || strcmp(v, "1") == 0);
+
+    dsn_get(dsn, "SSLVerify", v, sizeof(v));
+    if (v[0])
+        config->ssl_verify = !(strcasecmp(v, "false") == 0 ||
+                               strcasecmp(v, "no") == 0 || strcmp(v, "0") == 0);
+
+    dsn_get(dsn, "SSLNoRevoke", v, sizeof(v));
+    if (v[0])
+        config->ssl_no_revoke = (strcasecmp(v, "true") == 0 ||
+                                 strcasecmp(v, "yes") == 0 || strcmp(v, "1") == 0);
+
+    dsn_get(dsn, "SSLTrustStoreCertificate", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->ssl_truststore, v, sizeof(config->ssl_truststore) - 1),
+            config->ssl_truststore[sizeof(config->ssl_truststore) - 1] = '\0';
+
+    dsn_get(dsn, "Source", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->source, v, sizeof(config->source) - 1),
+            config->source[sizeof(config->source) - 1] = '\0';
+
+    dsn_get(dsn, "ClientTags", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->client_tags, v, sizeof(config->client_tags) - 1),
+            config->client_tags[sizeof(config->client_tags) - 1] = '\0';
+
+    dsn_get(dsn, "SessionProperties", v, sizeof(v));
+    if (v[0])
+        strncpy((char *)config->session_properties, v,
+                sizeof(config->session_properties) - 1),
+            config->session_properties[sizeof(config->session_properties) - 1] = '\0';
+
+    dsn_get(dsn, "QueryTimeout", v, sizeof(v));
+    if (v[0])
+        config->query_timeout = (SQLUINTEGER)parse_uint_value(v, config->query_timeout);
+
+    dsn_get(dsn, "ConnectTimeout", v, sizeof(v));
+    if (v[0])
+        config->connect_timeout =
+            (SQLUINTEGER)parse_uint_value(v, config->connect_timeout);
+}
+#else
+void trino_apply_dsn(const char *dsn, trino_conn_config_t *config)
+{
+    (void)dsn;
+    (void)config;
+}
+#endif /* _WIN32 */
+
+/* Extract the value of the DSN= keyword from a connection string, if present.
+ * Returns true and fills `out` when found. */
+bool trino_conn_str_get_dsn(const SQLCHAR *conn_str, char *out, size_t out_len)
+{
+    if (!conn_str || !out || out_len == 0)
+        return false;
+    out[0] = '\0';
+
+    char *str = strdup((const char *)conn_str);
+    if (!str)
+        return false;
+
+    bool found = false;
+    char *saveptr = NULL;
+    char *token = strtok_r(str, ";", &saveptr);
+    while (token) {
+        char *equals = strchr(token, '=');
+        if (equals) {
+            *equals = '\0';
+            char *key = token;
+            char *value = equals + 1;
+            while (*key == ' ')
+                key++;
+            while (*value == ' ')
+                value++;
+            if (strcasecmp(key, "DSN") == 0) {
+                strncpy(out, value, out_len - 1);
+                out[out_len - 1] = '\0';
+                found = true;
+                break;
+            }
+        }
+        token = strtok_r(NULL, ";", &saveptr);
+    }
+    free(str);
+    return found;
 }
 
 /* ========================================================================
