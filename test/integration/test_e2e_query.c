@@ -624,6 +624,45 @@ TEST(e2e_getdata_numeric)
     trino_http_set_test_transport(NULL, NULL);
 }
 
+/* varbinary cells arrive as base64 text; SQL_C_BINARY must decode to raw bytes. */
+TEST(e2e_getdata_binary)
+{
+    /* "Hello" base64-encodes to "SGVsbG8=". */
+    const char *responses[] = {
+        "{\"id\":\"q12\",\"nextUri\":\"http://h/p1\",\"stats\":{\"state\":\"RUNNING\"}}",
+        "{\"id\":\"q12\","
+        "\"columns\":[{\"name\":\"b\",\"type\":\"varbinary\"}],"
+        "\"data\":[[\"SGVsbG8=\"]],"
+        "\"stats\":{\"state\":\"FINISHED\"}}",
+        NULL};
+    mock_script_t script = {responses, 0, "", ""};
+    trino_http_set_test_transport(mock_transport, &script);
+
+    SQLHENV env;
+    SQLHDBC dbc;
+    SQLHSTMT stmt = make_connected_stmt(&env, &dbc);
+    ASSERT_TRUE(stmt != NULL);
+
+    ASSERT_EQ(SQLExecDirect(stmt, (SQLCHAR *)"SELECT b FROM x", SQL_NTS), SQL_SUCCESS);
+    ASSERT_EQ(SQLFetch(stmt), SQL_SUCCESS);
+
+    unsigned char buf[16];
+    memset(buf, 0, sizeof(buf));
+    SQLLEN ind = 0;
+    ASSERT_EQ(SQLGetData(stmt, 1, SQL_C_BINARY, buf, sizeof(buf), &ind), SQL_SUCCESS);
+    ASSERT_EQ(ind, 5); /* decoded length of "Hello" */
+    ASSERT_EQ(buf[0], 'H');
+    ASSERT_EQ(buf[1], 'e');
+    ASSERT_EQ(buf[2], 'l');
+    ASSERT_EQ(buf[3], 'l');
+    ASSERT_EQ(buf[4], 'o');
+
+    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+    SQLFreeHandle(SQL_HANDLE_DBC, dbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, env);
+    trino_http_set_test_transport(NULL, NULL);
+}
+
 int main(void)
 {
     printf("Running Trino ODBC Driver end-to-end tests...\n\n");
@@ -641,6 +680,7 @@ int main(void)
     test_e2e_getdata_wchar();
     test_e2e_getdata_wchar_truncation();
     test_e2e_getdata_numeric();
+    test_e2e_getdata_binary();
 
     printf("\n========================================\n");
     printf("Tests run:    %d\n", tests_run);

@@ -324,23 +324,112 @@ static SQLRETURN copy_wstring_out(const char *value, SQLPOINTER buffer,
     return ret;
 }
 
-/* Copy raw bytes into a binary output buffer, truncating if necessary. */
+/* Map a base64 character to its 6-bit value, or -1 if not a base64 symbol.
+ * Whitespace and the '=' padding are handled by the caller. */
+static int b64_value(unsigned char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return c - 'A';
+    if (c >= 'a' && c <= 'z')
+        return c - 'a' + 26;
+    if (c >= '0' && c <= '9')
+        return c - '0' + 52;
+    if (c == '+')
+        return 62;
+    if (c == '/')
+        return 63;
+    return -1;
+}
+
+/* Decode a base64 (RFC 4648) NUL-terminated string into a freshly allocated
+ * byte buffer. On success returns the buffer (caller frees) and sets *out_len.
+ * Whitespace is ignored. Returns NULL on a malformed input. An empty/whitespace
+ * input decodes to a zero-length buffer (returns a 1-byte allocation,
+ * *out_len = 0). */
+static unsigned char *base64_decode(const char *in, size_t *out_len)
+{
+    size_t cap = strlen(in) / 4 * 3 + 3;
+    unsigned char *out = malloc(cap ? cap : 1);
+    if (!out)
+        return NULL;
+
+    int quad[4];
+    int n = 0;       /* symbols collected in the current quad */
+    int pad = 0;     /* '=' padding seen */
+    size_t olen = 0;
+
+    for (const char *p = in; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '\r' || c == '\n' || c == ' ' || c == '\t')
+            continue;
+        if (c == '=') {
+            pad++;
+            quad[n++] = 0;
+        } else {
+            int v = b64_value(c);
+            if (v < 0 || pad > 0) {
+                /* Invalid symbol, or data after padding. */
+                free(out);
+                return NULL;
+            }
+            quad[n++] = v;
+        }
+        if (n == 4) {
+            out[olen++] = (unsigned char)((quad[0] << 2) | (quad[1] >> 4));
+            if (pad < 2)
+                out[olen++] = (unsigned char)((quad[1] << 4) | (quad[2] >> 2));
+            if (pad < 1)
+                out[olen++] = (unsigned char)((quad[2] << 6) | quad[3]);
+            n = 0;
+        }
+    }
+    if (n != 0) {
+        /* Trailing symbols not a multiple of 4 -> malformed. */
+        free(out);
+        return NULL;
+    }
+    *out_len = olen;
+    return out;
+}
+
+/* Copy a binary value into a binary output buffer, truncating if necessary.
+ * Trino returns `varbinary` cells as base64 text, so decode to raw bytes first.
+ * If the value is not valid base64, fall back to copying the raw bytes so the
+ * caller still gets something deterministic. */
 static SQLRETURN copy_binary_out(const char *value, SQLPOINTER buffer,
                                  SQLBUFFER_LENGTH buffer_length, SQLLEN *str_len_or_ind)
 {
-    size_t val_len = strlen(value);
+    size_t decoded_len = 0;
+    unsigned char *decoded = base64_decode(value, &decoded_len);
+
+    const unsigned char *bytes;
+    size_t val_len;
+    if (decoded) {
+        bytes = decoded;
+        val_len = decoded_len;
+    } else {
+        /* Not valid base64; copy raw (length via strlen as a last resort). */
+        bytes = (const unsigned char *)value;
+        val_len = strlen(value);
+    }
+
     if (str_len_or_ind)
         *str_len_or_ind = (SQLLEN)val_len;
 
-    if (!buffer || buffer_length <= 0) {
-        return SQL_SUCCESS_WITH_INFO;
+    SQLRETURN ret = SQL_SUCCESS;
+    if (buffer && buffer_length > 0) {
+        size_t copy = val_len;
+        if (copy > (size_t)buffer_length) {
+            copy = (size_t)buffer_length;
+            ret = SQL_SUCCESS_WITH_INFO; /* truncated */
+        }
+        memcpy(buffer, bytes, copy);
+    } else if (buffer_length <= 0) {
+        ret = SQL_SUCCESS_WITH_INFO;
     }
-    if (val_len > (size_t)buffer_length) {
-        memcpy(buffer, value, (size_t)buffer_length);
-        return SQL_SUCCESS_WITH_INFO;
-    }
-    memcpy(buffer, value, val_len);
-    return SQL_SUCCESS;
+
+    free(decoded);
+    return ret;
 }
 
 /* Parse a signed integer from a Trino string value. On success stores the
