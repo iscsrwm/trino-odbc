@@ -264,17 +264,43 @@ static void do_test_connection(HWND hdlg, const dsn_fields_t *f)
                     MB_ICONINFORMATION | MB_OK);
         SQLDisconnect(dbc);
     } else {
-        char msg[1024];
-        SQLCHAR sqlstate[6] = {0};
-        SQLCHAR diag[900] = {0};
-        SQLINTEGER native = 0;
-        SQLSMALLINT diag_len = 0;
-        if (SQLGetDiagRec(SQL_HANDLE_DBC, dbc, 1, sqlstate, &native, diag,
-                          sizeof(diag), &diag_len) == SQL_SUCCESS) {
-            _snprintf(msg, sizeof(msg), "Connection failed:\n\n[%s] %s", sqlstate,
-                      diag);
-        } else {
-            _snprintf(msg, sizeof(msg), "Connection failed (no diagnostic available).");
+        char msg[2048];
+        size_t pos = 0;
+        int found = 0;
+        SQLSMALLINT rec;
+        SQLSMALLINT handle_kinds[2] = {SQL_HANDLE_DBC, SQL_HANDLE_ENV};
+        SQLHANDLE handles[2] = {dbc, env};
+        int h;
+
+        pos += (size_t)_snprintf(msg + pos, sizeof(msg) - pos,
+                                 "Connection failed (rc=%d).\n", (int)ret);
+
+        /* Collect all diagnostic records from both the connection and the
+         * environment handle. The relevant error may sit on either, and there
+         * can be more than one record. */
+        for (h = 0; h < 2 && pos < sizeof(msg) - 1; h++) {
+            for (rec = 1; pos < sizeof(msg) - 1; rec++) {
+                SQLCHAR sqlstate[6] = {0};
+                SQLCHAR diag[900] = {0};
+                SQLINTEGER native = 0;
+                SQLSMALLINT diag_len = 0;
+                SQLRETURN dr = SQLGetDiagRec(handle_kinds[h], handles[h], rec,
+                                             sqlstate, &native, diag, sizeof(diag),
+                                             &diag_len);
+                if (dr != SQL_SUCCESS && dr != SQL_SUCCESS_WITH_INFO)
+                    break;
+                found++;
+                pos += (size_t)_snprintf(msg + pos, sizeof(msg) - pos,
+                                         "\n[%s] (%ld) %s", sqlstate, (long)native,
+                                         diag);
+            }
+        }
+
+        if (!found) {
+            _snprintf(msg + pos, sizeof(msg) - pos,
+                      "\nNo ODBC diagnostic was returned. Check that the server "
+                      "host/port are reachable and the driver is installed "
+                      "correctly. Set TRINO_ODBC_LOG to capture a driver trace.");
         }
         msg[sizeof(msg) - 1] = '\0';
         MessageBoxA(hdlg, msg, "Test Connection", MB_ICONERROR | MB_OK);
